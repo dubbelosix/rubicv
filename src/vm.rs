@@ -1,5 +1,5 @@
 use crate::instructions::FastDecodeTable;
-use crate::errors::RubiconVError;
+use crate::errors::RubicVError;
 use crate::memory_bounds::*;
 
 pub struct AddrRangePrecomputes {
@@ -91,7 +91,7 @@ impl VM<'_> {
     }
 
     #[inline(always)]
-    fn is_addr_valid_for_writes(&self, addr: u32) -> Result<(), RubiconVError> {
+    fn is_addr_valid_for_writes(&self, addr: u32) -> Result<(), RubicVError> {
         match self.get_region_type(addr) {
             REGION_RW => {
                 // Further check within the region
@@ -102,15 +102,15 @@ impl VM<'_> {
                 } else if addr >= RW_CUSTOM_SLAB_START && addr < self.rw_slab_end {
                     Ok(())
                 } else {
-                    Err(RubiconVError::MemoryWriteOutOfBounds)
+                    Err(RubicVError::MemoryWriteOutOfBounds)
                 }
             }
-            _ => Err(RubiconVError::MemoryWriteOutOfBounds),
+            _ => Err(RubicVError::MemoryWriteOutOfBounds),
         }
     }
 
     #[inline(always)]
-    fn is_addr_valid_for_reads(&self, addr: u32) -> Result<(), RubiconVError> {
+    fn is_addr_valid_for_reads(&self, addr: u32) -> Result<(), RubicVError> {
         match self.get_region_type(addr) {
             REGION_RW => self.is_addr_valid_for_writes(addr),
             REGION_RO => {
@@ -119,14 +119,14 @@ impl VM<'_> {
                 } else if addr >= RO_CUSTOM_SLAB_START && addr < self.ro_slab_end {
                     Ok(())
                 } else {
-                    Err(RubiconVError::MemoryReadOutOfBounds)
+                    Err(RubicVError::MemoryReadOutOfBounds)
                 }
             }
-            _ => Err(RubiconVError::MemoryReadOutOfBounds),
+            _ => Err(RubicVError::MemoryReadOutOfBounds),
         }
     }
 
-    // fn load_byte(&self, addr: u32) -> Result<u8, RubiconVError> {
+    // fn load_byte(&self, addr: u32) -> Result<u8, RubicVError> {
     //     if addr >= DATA_START && addr < DATA_START + self.data_memory.len() as u32 {
     //         // Accessing data slab
     //         let offset = (addr - DATA_START) as usize;
@@ -140,7 +140,7 @@ impl VM<'_> {
     //         let offset = (addr - CODE_START) as usize;
     //         Ok(self.code_memory[offset])
     //     } else {
-    //         Err(RubiconVError::MemoryAccessOutOfBoundsLoad)
+    //         Err(RubicVError::MemoryAccessOutOfBoundsLoad)
     //     }
     // }
 

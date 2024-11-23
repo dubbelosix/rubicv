@@ -1,5 +1,5 @@
 #[derive(Debug)]
-pub enum RubiconVError {
+pub enum RubicVError {
     IllegalInstruction,
     MemoryReadOutOfBounds,
     MemoryWriteOutOfBounds,

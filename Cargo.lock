@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "rubiconv"
+name = "rubicv"
 version = "0.1.0"

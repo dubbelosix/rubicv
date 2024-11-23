@@ -1,5 +1,5 @@
 [package]
-name = "rubiconv"
+name = "rubicv"
 version = "0.1.0"
 edition = "2021"
 
