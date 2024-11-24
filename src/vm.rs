@@ -110,7 +110,6 @@ impl VM<'_> {
     fn is_addr_valid_for_reads(&self, addr: u32) -> Result<(ReadSlice, usize), RubicVError> {
         match self.get_region_type(addr) {
             REGION_RW => {
-                // For RW regions, we need to return a read slice from the raw pointer
                 if addr >= RW_HEAP_START && addr < self.rw_heap_end {
                     unsafe {
                         Ok((&*self.bss_memory_ptr, (addr - RW_HEAP_START) as usize))

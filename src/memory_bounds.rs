@@ -24,7 +24,7 @@ macro_rules! define_regions {
 define_regions!(
     (RO_CODE_START, REGION_RO, 0x2000_0000u32),
     (RW_HEAP_START, REGION_RW, 0x3000_0000u32),
-    (RW_STACK_START, REGION_RW, 0x4000_0000u32),
+    (RW_STACK_START, REGION_RW, 0x3FFF_FFFCu32),
     (RO_CUSTOM_SLAB_START, REGION_RO, 0x8000_0000u32),
     (RW_CUSTOM_SLAB_START, REGION_RW, 0x9000_0000u32),
 );
@@ -38,7 +38,7 @@ mod tests {
         // Verify the region start addresses are correct
         assert_eq!(RO_CODE_START, 0x2000_0000);
         assert_eq!(RW_HEAP_START, 0x3000_0000);
-        assert_eq!(RW_STACK_START, 0x4000_0000);
+        assert_eq!(RW_STACK_START, 0x3FFF_FFFC);
         assert_eq!(RO_CUSTOM_SLAB_START, 0x8000_0000);
         assert_eq!(RW_CUSTOM_SLAB_START, 0x9000_0000);
     }
@@ -48,11 +48,8 @@ mod tests {
         // Test code region (0x2_)
         assert_eq!(REGION_TABLE[0x2], REGION_RO);
 
-        // Test heap region (0x3_)
+        // Test heap and stack region (0x3_)
         assert_eq!(REGION_TABLE[0x3], REGION_RW);
-
-        // Test stack region (0x4_)
-        assert_eq!(REGION_TABLE[0x4], REGION_RW);
 
         // Test custom slab regions (0x8_, 0x9_)
         assert_eq!(REGION_TABLE[0x8], REGION_RO);
@@ -64,6 +61,7 @@ mod tests {
         // Test some invalid regions
         assert_eq!(REGION_TABLE[0x0], REGION_INVALID); // Lower bound
         assert_eq!(REGION_TABLE[0x1], REGION_INVALID); // Before code region
+        assert_eq!(REGION_TABLE[0x4], REGION_INVALID); // After BSS
         assert_eq!(REGION_TABLE[0x5], REGION_INVALID); // Between regions
         assert_eq!(REGION_TABLE[0x7], REGION_INVALID); // Between regions
         assert_eq!(REGION_TABLE[0xA], REGION_INVALID); // After last region
@@ -80,18 +78,18 @@ mod tests {
         // Test start of regions
         assert_eq!(get_region_type(0x2000_0000), REGION_RO);
         assert_eq!(get_region_type(0x3000_0000), REGION_RW);
-        assert_eq!(get_region_type(0x4000_0000), REGION_RW);
         assert_eq!(get_region_type(0x8000_0000), REGION_RO);
         assert_eq!(get_region_type(0x9000_0000), REGION_RW);
 
         // Test middle of regions
         assert_eq!(get_region_type(0x2ABC_DEAD), REGION_RO);
-        assert_eq!(get_region_type(0x3FFF_FFFF), REGION_RW);
-        assert_eq!(get_region_type(0x4123_4567), REGION_RW);
+        assert_eq!(get_region_type(0x3FFF_FFFC), REGION_RW);
         assert_eq!(get_region_type(0x8765_4321), REGION_RO);
         assert_eq!(get_region_type(0x9DEF_BEEF), REGION_RW);
 
         // Test invalid addresses
+        assert_eq!(get_region_type(0x4000_0000), REGION_INVALID);
+        assert_eq!(get_region_type(0x4123_4567), REGION_INVALID);
         assert_eq!(get_region_type(0x0000_0000), REGION_INVALID);
         assert_eq!(get_region_type(0x1FFF_FFFF), REGION_INVALID);
         assert_eq!(get_region_type(0x5000_0000), REGION_INVALID);
