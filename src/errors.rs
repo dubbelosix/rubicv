@@ -1,9 +1,10 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RubicVError {
     IllegalInstruction,
+    InvalidInstruction,
     MemoryReadOutOfBounds,
     MemoryWriteOutOfBounds,
-    MisalignedAccess,
+    MemoryMisaligned,
     IllegalMemoryAccess,
     WriteToReadOnlyMemory,
 }
