@@ -1,4 +1,4 @@
-use crate::instructions::{FastDecodeTable, InsnKind};
+use crate::instructions::{DecodedInstruction, FastDecodeTable, InsnCategory, InsnKind};
 use crate::errors::RubicVError;
 use crate::memory_bounds::*;
 
@@ -29,7 +29,7 @@ pub struct VM<'a> {
     ro_code_end: u32,
     ro_slab_end: u32,
 
-    fast_decode_table: FastDecodeTable,
+    decoder: FastDecodeTable,
 }
 
 impl VM<'_> {
@@ -60,7 +60,7 @@ impl VM<'_> {
 
         VM {
             registers: [0;32],
-            pc: 0,
+            pc: RO_CODE_START,
             cycle_count: 0,
             code_memory,
             bss_memory_ptr,
@@ -78,7 +78,7 @@ impl VM<'_> {
             ro_code_end,
             ro_slab_end,
 
-            fast_decode_table: FastDecodeTable::default()
+            decoder: FastDecodeTable::default()
         }
     }
 
@@ -243,6 +243,87 @@ impl VM<'_> {
             Ok(())
         }
     }
+
+    pub fn step(&mut self) -> Result<(), RubicVError> {
+        println!("PC: 0x{:08x}", self.pc);
+        let word = self.read_u32(self.pc)?;
+        println!("Instruction word: 0x{:08x}", word);
+        let decoded = DecodedInstruction::new(word);
+        println!("{:?}", decoded);
+        let insn = self.decoder.lookup(&decoded);
+
+        // Always ensure x0 is 0
+        self.registers[0] = 0;
+
+        match insn.category {
+            // InsnCategory::Compute => self.step_compute(insn.kind, &decoded)?,
+            // InsnCategory::System => self.step_system(insn.kind, &decoded)?,
+            InsnCategory::Load => self.step_load(insn.kind, &decoded)?,
+            InsnCategory::Store => self.step_store(insn.kind, &decoded)?,
+            InsnCategory::Invalid => return Err(RubicVError::IllegalInstruction),
+            _ => return Err(RubicVError::IllegalInstruction)
+        }
+
+        self.cycle_count += insn.cycles;
+        Ok(())
+    }
+
+    fn step_load(&mut self, kind: InsnKind, decoded: &DecodedInstruction) -> Result<(), RubicVError> {
+        let rs1 = self.registers[decoded.rs1 as usize];
+        let addr = rs1.wrapping_add(decoded.imm_i());
+
+        let out = match kind {
+            InsnKind::LB => {
+                let byte = self.read_u8(addr)?;
+                sign_extend(byte as u32, 8)
+            }
+            InsnKind::LH => {
+                let half = self.read_u16(addr)?;
+                sign_extend(half as u32, 16)
+            }
+            InsnKind::LW => {
+                self.read_u32(addr)?
+            }
+            InsnKind::LBU => {
+                self.read_u8(addr)? as u32
+            }
+            InsnKind::LHU => {
+                self.read_u16(addr)? as u32
+            }
+            _ => return Err(RubicVError::IllegalInstruction),
+        };
+
+        self.registers[decoded.rd as usize] = out;
+        self.pc += 4;
+        Ok(())
+    }
+
+    fn step_store(&mut self, kind: InsnKind, decoded: &DecodedInstruction) -> Result<(), RubicVError> {
+        let rs1 = self.registers[decoded.rs1 as usize];
+        let rs2 = self.registers[decoded.rs2 as usize];
+        let addr = rs1.wrapping_add(decoded.imm_s());
+
+        match kind {
+            InsnKind::SB => {
+                self.write_u8(addr, rs2 as u8)?;
+            }
+            InsnKind::SH => {
+                self.write_u16(addr, rs2 as u16)?;
+            }
+            InsnKind::SW => {
+                self.write_u32(addr, rs2)?;
+            }
+            _ => return Err(RubicVError::IllegalInstruction),
+        }
+
+        self.pc += 4;
+        Ok(())
+    }
+}
+
+fn sign_extend(value: u32, bits: u32) -> u32 {
+    let shift = 32 - bits;
+    ((value << shift) as i32 >> shift) as u32
 }
 
 #[cfg(test)]
@@ -250,7 +331,8 @@ mod tests {
     use super::*;
     use std::ptr;
 
-    const TEST_MEM_SIZE: usize = 1024; // 1KB for each region
+    const TEST_MEM_SIZE: usize = 1024;
+    const SMALL_TEST_MEM_SIZE: usize = 64;
 
     struct TestMemory {
         bss_memory: [u8; TEST_MEM_SIZE*2],
@@ -258,8 +340,6 @@ mod tests {
         code_memory: [u8; TEST_MEM_SIZE],
         ro_slab: [u8; TEST_MEM_SIZE]
     }
-
-    // First setup function creates and returns test memory
     fn setup_memory() -> TestMemory {
         let mut bss_memory = [0u8; TEST_MEM_SIZE*2];
         let mut rw_slab = [0u8; TEST_MEM_SIZE];
@@ -428,5 +508,190 @@ mod tests {
             vm.write_u32(RW_CUSTOM_SLAB_START + TEST_MEM_SIZE as u32, 0),
             Err(RubicVError::MemoryWriteOutOfBounds)
         );
+    }
+
+    // Helper to create encoded load instruction
+    fn encode_load(rd: u32, rs1: u32, func3: u32, imm: i32) -> u32 {
+        let opcode = 0x03;  // Load opcode
+        let imm = (imm as u32) & 0xFFF; // 12-bit immediate
+        (imm << 20) | (rs1 << 15) | (func3 << 12) | (rd << 7) | opcode
+    }
+
+    // Helper to create encoded store instruction
+    fn encode_store(rs2: u32, rs1: u32, func3: u32, imm: i32) -> u32 {
+        let opcode = 0x23;  // Store opcode
+        let imm = (imm as u32) & 0xFFF; // 12-bit immediate
+        let imm115 = (imm >> 5) & 0x7F;
+        let imm40 = imm & 0x1F;
+        (imm115 << 25) | (rs2 << 20) | (rs1 << 15) | (func3 << 12) | (imm40 << 7) | opcode
+    }
+
+    #[test]
+    fn test_load_byte() {
+        let mut code_memory = [0u8; TEST_MEM_SIZE];
+
+        // Create instruction: LB x1, 0(x2) - Load byte from address in x2
+        let instruction = encode_load(1, 2, 0x0, 0); // Use x2 as base, offset 0
+        code_memory[0..4].copy_from_slice(&instruction.to_le_bytes());
+
+        let mut bss_memory = [0u8; TEST_MEM_SIZE * 2];
+
+        // Test case 1: Sign bit 1
+        bss_memory[0] = 0xFF;  // 1111_1111, sign bit is 1
+        let mut vm = VM::new(
+            &code_memory,
+            &[0u8; TEST_MEM_SIZE],
+            &mut bss_memory as *mut [u8],
+            &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+        );
+        vm.registers[2] = RW_HEAP_START;
+        vm.step().unwrap();
+        assert_eq!(vm.registers[1], 0xFFFF_FFFF); // Sign-extended with 1s
+
+        // Test case 2: Sign bit 0
+        bss_memory[0] = 0x7F;  // 0111_1111, sign bit is 0
+        let mut vm = VM::new(
+            &code_memory,
+            &[0u8; TEST_MEM_SIZE],
+            &mut bss_memory as *mut [u8],
+            &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+        );
+        vm.registers[2] = RW_HEAP_START;
+        vm.step().unwrap();
+        assert_eq!(vm.registers[1], 0x0000_007F); // Sign-extended with 0s
+    }
+
+    #[test]
+    fn test_store_load_sequence() {
+        let store_instruction = encode_store(2, 1, 0x2, 8);
+        let load_instruction = encode_load(3, 1, 0x2, 8);
+
+        let mut code_memory = [0u8; TEST_MEM_SIZE];
+        code_memory[0..4].copy_from_slice(&store_instruction.to_le_bytes());
+        code_memory[4..8].copy_from_slice(&load_instruction.to_le_bytes());
+
+        let mut vm = VM::new(
+            &code_memory,
+            &[0u8; TEST_MEM_SIZE],
+            &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
+            &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+            TEST_MEM_SIZE,
+        );
+
+        // rs1 base address. offset 8, so we're writing to start of heap + 8
+        vm.registers[1] = RW_HEAP_START;
+        // rs2 value to store
+        vm.registers[2] = 0xDEADBEEF;
+        // destination register for load is init to 0
+        vm.registers[3] = 0;
+
+        // desired heap address contains 0 at init
+        assert_eq!(vm.read_u32(RW_HEAP_START+8), Ok(0x0));
+        // Execute store
+        vm.step().unwrap();
+        assert_eq!(vm.pc, RO_CODE_START+4);
+        // desired heap address contains 0xDEADBEEF
+        assert_eq!(vm.read_u32(RW_HEAP_START+8), Ok(0xDEADBEEF));
+        assert_eq!(vm.registers[3], 0);
+
+        // Execute load
+        vm.step().unwrap();
+        assert_eq!(vm.registers[3], 0xDEADBEEF);
+        assert_eq!(vm.pc, RO_CODE_START+8);
+    }
+
+    #[test]
+    fn test_stack_operations() {
+        let store_instruction = encode_store(1, 2, 0x2, -8);
+        let load_instruction = encode_load(3, 2, 0x2, -8);
+
+        let mut code_memory = [0u8; TEST_MEM_SIZE];
+        code_memory[0..4].copy_from_slice(&store_instruction.to_le_bytes());
+        code_memory[4..8].copy_from_slice(&load_instruction.to_le_bytes());
+
+        let mut vm = VM::new(
+            &code_memory,
+            &[0u8; TEST_MEM_SIZE],
+            &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
+            &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+        );
+
+        // Set up registers
+        vm.registers[1] = 0xFEEDBEEF;
+        vm.registers[2] = RW_STACK_START;
+        vm.registers[3] = 0;
+
+        assert_eq!(vm.read_u32(RW_STACK_START-8), Ok(0x0));
+
+        // Execute store
+        vm.step().unwrap();
+        assert_eq!(vm.pc, RO_CODE_START+4);
+        assert_eq!(vm.registers[3], 0);
+        assert_eq!(vm.read_u32(RW_STACK_START-8), Ok(0xFEEDBEEF));
+        // Execute load
+        vm.step().unwrap();
+        assert_eq!(vm.registers[3], 0xFEEDBEEF);
+        assert_eq!(vm.pc, RO_CODE_START+8);
+    }
+
+    #[test]
+    fn test_half_word_operations() {
+        // Create instructions:
+        // 1. SH x1, 2(x0)   - Store half
+        // 2. LH x2, 2(x0)   - Load half (signed)
+        // 3. LHU x3, 2(x0)  - Load half unsigned
+        let store_instruction = encode_store(2, 1, 0x1, 2);
+        let load_signed = encode_load(2, 1, 0x1, 2);
+        let load_unsigned = encode_load(3, 1, 0x5, 2);
+
+        let mut code_memory = [0u8; TEST_MEM_SIZE];
+        code_memory[0..4].copy_from_slice(&store_instruction.to_le_bytes());
+        code_memory[4..8].copy_from_slice(&load_signed.to_le_bytes());
+        code_memory[8..12].copy_from_slice(&load_unsigned.to_le_bytes());
+
+        let mut vm = VM::new(
+            &code_memory,
+            &[0u8; TEST_MEM_SIZE],
+            &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
+            &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+            SMALL_TEST_MEM_SIZE,
+        );
+
+        // Set up register with a negative number when interpreted as i16
+        vm.registers[2] = 0x8000;
+        // Heap Address
+        vm.registers[1] = RW_HEAP_START;
+
+        // Execute all instructions
+        vm.step().unwrap();  // store
+        vm.step().unwrap();  // load signed
+        vm.step().unwrap();  // load unsigned
+
+        assert_eq!(vm.registers[2], 0xFFFF_8000);  // Sign-extended
+        assert_eq!(vm.registers[3], 0x0000_8000);  // Zero-extended
+        assert_eq!(vm.pc, RO_CODE_START+12);
     }
 }

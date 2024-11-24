@@ -52,7 +52,7 @@ pub enum InsnKind {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum InsnCategory {
+pub enum InsnCategory {
     Compute,
     Load,
     Store,
@@ -62,12 +62,12 @@ enum InsnCategory {
 
 #[derive(Clone, Copy, Debug)]
 pub struct Instruction {
-    pub kind: InsnKind,
-    category: InsnCategory,
-    pub opcode: u32,
-    pub func3: u32,
-    pub func7: u32,
-    pub cycles: usize,
+    pub(crate)  kind: InsnKind,
+    pub(crate) category: InsnCategory,
+    pub(crate)  opcode: u32,
+    pub(crate)  func3: u32,
+    pub(crate)  func7: u32,
+    pub(crate)  cycles: usize,
 }
 
 type InstructionTable = [Instruction; 48];
@@ -143,19 +143,19 @@ const RV32IM_ISA: InstructionTable = [
 ];
 
 #[derive(Clone, Debug, Default)]
-pub struct DecodedInstruction {
+pub(crate) struct DecodedInstruction {
     pub insn: u32,
-    top_bit: u32,
-    func7: u32,
-    rs2: u32,
-    rs1: u32,
-    func3: u32,
-    rd: u32,
-    opcode: u32,
+    pub top_bit: u32,
+    pub func7: u32,
+    pub rs2: u32,
+    pub rs1: u32,
+    pub func3: u32,
+    pub rd: u32,
+    pub opcode: u32,
 }
 
 impl DecodedInstruction {
-    fn new(insn: u32) -> Self {
+    pub(crate) fn new(insn: u32) -> Self {
         Self {
             insn,
             top_bit: (insn & 0x80000000) >> 31,
@@ -175,11 +175,11 @@ impl DecodedInstruction {
             | (self.rd & 0x1e)
     }
 
-    fn imm_i(&self) -> u32 {
+    pub(crate) fn imm_i(&self) -> u32 {
         (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rs2
     }
 
-    fn imm_s(&self) -> u32 {
+    pub(crate) fn imm_s(&self) -> u32 {
         (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rd
     }
 
@@ -249,7 +249,7 @@ impl FastDecodeTable {
         }
     }
 
-    fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
+    pub(crate) fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
         let isa_idx = self.table[Self::map10(decoded.opcode, decoded.func3, decoded.func7)];
         RV32IM_ISA[isa_idx as usize]
     }
