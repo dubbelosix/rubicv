@@ -8,13 +8,13 @@ use crate::memory_bounds::*;
 type ReadSlice<'a> = &'a [u8];
 type WriteSlice = *mut [u8];
 pub struct VM<'a> {
-    registers: [u32; 32],
+    pub registers: [u32; 32],
     pc: u32,
-    cycle_count: usize,
+    pub cycle_count: usize,
 
     code_memory: ReadSlice<'a>,
     ro_slab: ReadSlice<'a>,
-    rw_slab: WriteSlice,
+    pub rw_slab: WriteSlice,
     ro_args: ReadSlice<'a>,
 
     bss_memory_ptr: WriteSlice,
