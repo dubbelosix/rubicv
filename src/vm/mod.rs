@@ -90,6 +90,33 @@ impl VM<'_> {
         }
     }
 
+    pub fn reset(&mut self) {
+        // Zero out registers
+        self.registers = [0; 32];
+        // Reset program counter to start of code
+        self.pc = RO_CODE_START;
+        // Reset cycle count
+        self.cycle_count = 0;
+        // Reset stack pointer
+        self.registers[2] = RW_STACK_START;
+
+        // Zero out heap and stack memory
+        unsafe {
+            let heap_size = (self.rw_heap_end - RW_HEAP_START) as usize;
+            let stack_size = (self.rw_stack_end - self.rw_stack_start) as usize;
+            if let Some(slice) = (*self.bss_memory_ptr).get_mut(..heap_size + stack_size) {
+                slice.fill(0);
+            }
+        }
+
+        // Zero out RW slab
+        unsafe {
+            if let Some(slice) = (*self.rw_slab).get_mut(..) {
+                slice.fill(0);
+            }
+        }
+    }
+
 
     #[inline(always)]
     fn get_region_type(&self, addr: u32) -> u8 {
@@ -240,6 +267,7 @@ impl VM<'_> {
     /// Store Word
     #[inline(always)]
     pub fn write_u32(&mut self, addr: u32, value: u32) -> Result<(), RubicVError> {
+        // println!("write u32 {} {}", addr, value);
         if addr % 4 != 0 {
             return Err(RubicVError::MemoryMisaligned);
         }
@@ -255,11 +283,11 @@ impl VM<'_> {
     }
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
-        println!("PC: 0x{:08x}", self.pc);
+        // println!("PC: 0x{:08x}", self.pc);
         let word = self.read_u32(self.pc)?;
-        println!("Instruction word: 0x{:08x}", word);
+        // println!("Instruction word: 0x{:08x}", word);
         let decoded = DecodedInstruction::new(word);
-        println!("{:?}", decoded);
+        // println!("{:?}", decoded);
         let insn = self.decoder.lookup(&decoded);
 
         // Always ensure x0 is 0
@@ -449,7 +477,7 @@ impl VM<'_> {
         match kind {
             InsnKind::ECALL => {
                 // Standard RISC-V ECALL - returns with value from a0 (x10)
-                println!("ECALL a0: {} pc: {}",self.registers[10], self.pc);
+                // println!("ECALL a0: {} pc: {}",self.registers[10], self.pc);
                 Err(RubicVError::SystemCall(self.registers[10]))
             }
             InsnKind::EBREAK => {
