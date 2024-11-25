@@ -47,7 +47,8 @@ pub enum InsnKind {
     SB,
     SH,
     SW,
-    EANY,
+    ECALL,
+    EBREAK,
     MRET,
 }
 
@@ -70,7 +71,7 @@ pub struct Instruction {
     pub(crate)  cycles: usize,
 }
 
-type InstructionTable = [Instruction; 48];
+type InstructionTable = [Instruction; 49];
 type FastInstructionTable = [u8; 1 << 10];
 
 const fn insn(
@@ -138,7 +139,8 @@ const RV32IM_ISA: InstructionTable = [
     insn(InsnKind::SB, InsnCategory::Store, 0x23, 0x0, -1, 1),
     insn(InsnKind::SH, InsnCategory::Store, 0x23, 0x1, -1, 1),
     insn(InsnKind::SW, InsnCategory::Store, 0x23, 0x2, -1, 1),
-    insn(InsnKind::EANY, InsnCategory::System, 0x73, 0x0, 0x00, 1),
+    insn(InsnKind::ECALL, InsnCategory::System, 0x73, 0x0, 0x00, 1),
+    insn(InsnKind::EBREAK, InsnCategory::System, 0x73, 0x0, 0x01, 1),
     insn(InsnKind::MRET, InsnCategory::System, 0x73, 0x0, 0x18, 1),
 ];
 
@@ -168,7 +170,7 @@ impl DecodedInstruction {
         }
     }
 
-    fn imm_b(&self) -> u32 {
+    pub(crate) fn imm_b(&self) -> u32 {
         (self.top_bit * 0xfffff000)
             | ((self.rd & 1) << 11)
             | ((self.func7 & 0x3f) << 5)
@@ -183,7 +185,7 @@ impl DecodedInstruction {
         (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rd
     }
 
-    fn imm_j(&self) -> u32 {
+    pub(crate) fn imm_j(&self) -> u32 {
         (self.top_bit * 0xfff00000)
             | (self.rs1 << 15)
             | (self.func3 << 12)
@@ -192,7 +194,7 @@ impl DecodedInstruction {
             | (self.rs2 & 0x1e)
     }
 
-    fn imm_u(&self) -> u32 {
+    pub(crate) fn imm_u(&self) -> u32 {
         self.insn & 0xfffff000
     }
 }

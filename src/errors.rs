@@ -5,6 +5,9 @@ pub enum RubicVError {
     MemoryReadOutOfBounds,
     MemoryWriteOutOfBounds,
     MemoryMisaligned,
+    MisalignedAccess,
     IllegalMemoryAccess,
     WriteToReadOnlyMemory,
+    Breakpoint, // :P
+    SystemCall(u32)
 }
