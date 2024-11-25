@@ -5,6 +5,7 @@ MEMORY {
     STACK (rw)        : ORIGIN = 0x30000000, LENGTH = 0x0FFFFFFC  /* Grows down from top */
     RO_SLAB (r)       : ORIGIN = 0x80000000, LENGTH = 0x10000000
     RW_SLAB (rw)      : ORIGIN = 0x90000000, LENGTH = 0x10000000
+    RO_ARGS (rw)      : ORIGIN = 0xA0000000, LENGTH = 0x10000000
 }
 
 /* Exported symbols for program use */
@@ -13,6 +14,7 @@ _stack_bottom = 0x30000000;  /* Where heap ends and minimum stack address begins
 _stack_top = 0x3FFFFFFC;     /* Initial stack pointer */
 _ro_slab_start = 0x80000000;
 _rw_slab_start = 0x90000000;
+_ro_args_start = 0xA0000000;
 
 SECTIONS {
     /* Code section starts at RO_CODE_START */
