@@ -7,13 +7,15 @@ struct TestMemory {
     bss_memory: [u8; TEST_MEM_SIZE*2],
     rw_slab: [u8; TEST_MEM_SIZE],
     code_memory: [u8; TEST_MEM_SIZE],
-    ro_slab: [u8; TEST_MEM_SIZE]
+    ro_slab: [u8; TEST_MEM_SIZE],
+    ro_args: [u8; TEST_MEM_SIZE]
 }
 fn setup_memory() -> TestMemory {
     let mut bss_memory = [0u8; TEST_MEM_SIZE*2];
     let mut rw_slab = [0u8; TEST_MEM_SIZE];
     let mut code_memory =  [0u8; TEST_MEM_SIZE];
     let ro_slab = [0u8; TEST_MEM_SIZE];
+    let ro_args =  [0u8; TEST_MEM_SIZE];
 
     // Set some recognizable patterns
     for i in 0..TEST_MEM_SIZE*2 {
@@ -30,6 +32,7 @@ fn setup_memory() -> TestMemory {
         rw_slab,
         code_memory,
         ro_slab,
+        ro_args
     }
 }
 
@@ -39,11 +42,13 @@ fn setup_vm(memory: &mut TestMemory) -> VM {
         &memory.ro_slab,
         &mut memory.bss_memory as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
+        &memory.ro_args,
         TEST_MEM_SIZE,    // heap size
         TEST_MEM_SIZE,    // stack size
         TEST_MEM_SIZE,    // code size
         TEST_MEM_SIZE,    // ro slab size
         TEST_MEM_SIZE,    // rw slab size
+        TEST_MEM_SIZE,    // ro args size
     )
 }
 
@@ -212,6 +217,8 @@ fn test_load_byte() {
         &[0u8; TEST_MEM_SIZE],
         &mut bss_memory as *mut [u8],
         &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+        &[0u8; TEST_MEM_SIZE],
+        TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
@@ -229,6 +236,8 @@ fn test_load_byte() {
         &[0u8; TEST_MEM_SIZE],
         &mut bss_memory as *mut [u8],
         &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+        &[0u8; TEST_MEM_SIZE],
+        TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
@@ -254,6 +263,8 @@ fn test_store_load_sequence() {
         &[0u8; TEST_MEM_SIZE],
         &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
         &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+        &[0u8; TEST_MEM_SIZE],
+        TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
         TEST_MEM_SIZE,
@@ -297,6 +308,8 @@ fn test_stack_operations() {
         &[0u8; TEST_MEM_SIZE],
         &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
         &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+        &[0u8; TEST_MEM_SIZE],
+        SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,
@@ -342,6 +355,8 @@ fn test_half_word_operations() {
         &[0u8; TEST_MEM_SIZE],
         &mut [0u8; TEST_MEM_SIZE * 2] as *mut [u8],
         &mut [0u8; TEST_MEM_SIZE] as *mut [u8],
+        &[0u8; TEST_MEM_SIZE],
+        SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,
         SMALL_TEST_MEM_SIZE,

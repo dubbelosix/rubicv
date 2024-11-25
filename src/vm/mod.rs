@@ -14,8 +14,10 @@ pub struct VM<'a> {
 
     code_memory: ReadSlice<'a>,
     ro_slab: ReadSlice<'a>,
-    bss_memory_ptr: WriteSlice,
     rw_slab: WriteSlice,
+    ro_args: ReadSlice<'a>,
+
+    bss_memory_ptr: WriteSlice,
 
     // Precomputes
     rw_heap_end: u32,
@@ -24,8 +26,17 @@ pub struct VM<'a> {
     rw_slab_end: u32,
     ro_code_end: u32,
     ro_slab_end: u32,
+    ro_args_end: u32,
 
     decoder: FastDecodeTable,
+}
+
+#[derive(Debug)]
+pub enum ExecutionResult {
+    Success(u32),
+    Breakpoint,
+    CycleLimitExceeded,
+    Error(RubicVError),
 }
 
 impl VM<'_> {
@@ -33,11 +44,13 @@ impl VM<'_> {
                    ro_slab: &'a [u8],
                    bss_memory_ptr: *mut [u8],
                    rw_slab: *mut [u8],
+                   ro_args: &'a [u8],
                    rw_heap_maxsize: usize,
                    rw_stack_maxsize: usize,
                    ro_code_maxsize: usize,
                    ro_slab_maxsize: usize,
                    rw_slab_maxsize: usize,
+                   ro_args_maxsize: usize,
 
     ) -> VM<'a> {
 
@@ -53,6 +66,8 @@ impl VM<'_> {
             .expect("Code size overflow");
         let ro_slab_end = RO_CUSTOM_SLAB_START.checked_add(ro_slab_maxsize as u32)
             .expect("RO slab size overflow");
+        let ro_args_end = RO_CUSTOM_ARGS_START.checked_add(ro_args_maxsize as u32)
+            .expect("RO slab size overflow");
 
         VM {
             registers: [0;32],
@@ -62,12 +77,14 @@ impl VM<'_> {
             bss_memory_ptr,
             rw_slab,
             ro_slab,
+            ro_args,
             rw_heap_end,
             rw_stack_start,
             rw_stack_end,
             rw_slab_end,
             ro_code_end,
             ro_slab_end,
+            ro_args_end,
 
             decoder: FastDecodeTable::default()
         }
@@ -122,6 +139,8 @@ impl VM<'_> {
                     Ok((self.code_memory, (addr - RO_CODE_START) as usize))
                 } else if addr >= RO_CUSTOM_SLAB_START && addr < self.ro_slab_end {
                     Ok((self.ro_slab, (addr - RO_CUSTOM_SLAB_START) as usize))
+                } else if addr >= RO_CUSTOM_ARGS_START && addr < self.ro_args_end {
+                    Ok((self.ro_args, (addr - RO_CUSTOM_ARGS_START) as usize))
                 } else {
                     Err(RubicVError::MemoryReadOutOfBounds)
                 }
@@ -430,6 +449,7 @@ impl VM<'_> {
         match kind {
             InsnKind::ECALL => {
                 // Standard RISC-V ECALL - returns with value from a0 (x10)
+                println!("ECALL a0: {} pc: {}",self.registers[10], self.pc);
                 Err(RubicVError::SystemCall(self.registers[10]))
             }
             InsnKind::EBREAK => {
@@ -437,6 +457,26 @@ impl VM<'_> {
                 Err(RubicVError::Breakpoint)
             }
             InsnKind::MRET | _ => Err(RubicVError::IllegalInstruction),
+        }
+    }
+
+    pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
+        self.registers[10] = arg_count;
+        self.registers[2] = RW_STACK_START;
+
+        loop {
+            if let Some(max) = max_cycles {
+                if self.cycle_count >= max as usize {
+                    return ExecutionResult::CycleLimitExceeded;
+                }
+            }
+
+            match self.step() {
+                Ok(()) => continue,
+                Err(RubicVError::SystemCall(val)) => return ExecutionResult::Success(val),
+                Err(RubicVError::Breakpoint) => return ExecutionResult::Breakpoint,
+                Err(e) => return ExecutionResult::Error(e),
+            }
         }
     }
 

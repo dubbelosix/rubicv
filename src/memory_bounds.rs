@@ -27,6 +27,7 @@ define_regions!(
     (RW_STACK_START, REGION_RW, 0x3FFF_FFFCu32),
     (RO_CUSTOM_SLAB_START, REGION_RO, 0x8000_0000u32),
     (RW_CUSTOM_SLAB_START, REGION_RW, 0x9000_0000u32),
+    (RO_CUSTOM_ARGS_START, REGION_RO, 0xA000_0000u32),
 );
 
 #[cfg(test)]
@@ -41,6 +42,7 @@ mod tests {
         assert_eq!(RW_STACK_START, 0x3FFF_FFFC);
         assert_eq!(RO_CUSTOM_SLAB_START, 0x8000_0000);
         assert_eq!(RW_CUSTOM_SLAB_START, 0x9000_0000);
+        assert_eq!(RO_CUSTOM_ARGS_START, 0xA000_0000u32);
     }
 
     #[test]
@@ -54,6 +56,8 @@ mod tests {
         // Test custom slab regions (0x8_, 0x9_)
         assert_eq!(REGION_TABLE[0x8], REGION_RO);
         assert_eq!(REGION_TABLE[0x9], REGION_RW);
+
+        assert_eq!(REGION_TABLE[0xA], REGION_RO);
     }
 
     #[test]
@@ -64,7 +68,7 @@ mod tests {
         assert_eq!(REGION_TABLE[0x4], REGION_INVALID); // After BSS
         assert_eq!(REGION_TABLE[0x5], REGION_INVALID); // Between regions
         assert_eq!(REGION_TABLE[0x7], REGION_INVALID); // Between regions
-        assert_eq!(REGION_TABLE[0xA], REGION_INVALID); // After last region
+        assert_eq!(REGION_TABLE[0xB], REGION_INVALID); // After last region
         assert_eq!(REGION_TABLE[0xF], REGION_INVALID); // Upper bound
     }
 
@@ -109,7 +113,9 @@ mod tests {
         assert_eq!(get_region_type(0x3000_0000), REGION_RW);      // Start of heap
 
         // Test upper boundaries
-        assert_eq!(get_region_type(0x9FFF_FFFF), REGION_RW);      // End of last RW region
-        assert_eq!(get_region_type(0xA000_0000), REGION_INVALID); // After last region
+        assert_eq!(get_region_type(0x8FFF_FFFF), REGION_RO);      // End of SLAB RO region
+        assert_eq!(get_region_type(0x9FFF_FFFF), REGION_RW);      // End of SLAB RW region
+        assert_eq!(get_region_type(0xA000_0000), REGION_RO);      // End of ARGS RO region
+        assert_eq!(get_region_type(0xB000_0000), REGION_INVALID); // After last region
     }
 }

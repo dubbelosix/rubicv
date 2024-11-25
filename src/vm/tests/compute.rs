@@ -5,6 +5,7 @@ static mut TEST_MEMORY: [u8; TEST_MEM] = [0; TEST_MEM];
 static mut RO_SLAB: [u8; TEST_MEM] = [0; TEST_MEM];
 static mut BSS_MEMORY: [u8; TEST_MEM] = [0; TEST_MEM];
 static mut RW_SLAB: [u8; TEST_MEM] = [0; TEST_MEM];
+static mut RO_ARGS: [u8; TEST_MEM] = [0; TEST_MEM];
 
 // R-type helper
 fn encode_r_type(rs1: u32, rs2: u32, rd: u32, func3: u32, func7: u32) -> u32 {
@@ -38,6 +39,7 @@ fn setup_compute_vm(instruction: u32, registers: &[u32; 32]) -> VM {
         zero_memory(&mut RO_SLAB);
         zero_memory(&mut BSS_MEMORY);
         zero_memory(&mut RW_SLAB);
+        zero_memory(&mut RO_ARGS);
 
         TEST_MEMORY[0..4].copy_from_slice(&instruction.to_le_bytes());
 
@@ -46,7 +48,8 @@ fn setup_compute_vm(instruction: u32, registers: &[u32; 32]) -> VM {
             &RO_SLAB,
             &mut BSS_MEMORY as *mut [u8],
             &mut RW_SLAB as *mut [u8],
-            64, 64, 64, 64, 64,
+            &RO_ARGS,
+            64, 64, 64, 64, 64, 64,
         );
 
         vm.registers.copy_from_slice(registers);
@@ -106,6 +109,7 @@ fn test_x0_remains_zero() {
         RO_SLAB.fill(0);
         BSS_MEMORY.fill(0);
         RW_SLAB.fill(0);
+        RO_ARGS.fill(0);
 
         // Setup both instructions
         let add_instruction = encode_r_type(1, 2, 0, 0x0, 0x00);
@@ -125,7 +129,8 @@ fn test_x0_remains_zero() {
             &RO_SLAB,
             &mut BSS_MEMORY as *mut [u8],
             &mut RW_SLAB as *mut [u8],
-            TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM,
+            &RO_ARGS,
+            TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM,TEST_MEM
         );
         vm.registers.copy_from_slice(&registers);
 
