@@ -17,6 +17,7 @@ pub struct VM<'a> {
     pub cycle_count: usize,
 
     pub rw_slab: *mut [u8],
+    // writes are prevented anyway, but make this a const ptr sometime
     pub ro_slab: *mut [u8],
 
     ppc: usize, // pre-decoded program counter
