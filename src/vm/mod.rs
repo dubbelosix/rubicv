@@ -40,15 +40,62 @@ impl VM {
     }
 
     #[inline(always)]
+    pub fn read_u32(&self, addr: u32) -> u32 {
+        unsafe {
+            let ptr = if addr & 0x8000_0000 == 0 {
+                (self.rw_slab as *const u32).add((addr & RW_MASK) as usize >> 2)
+            } else {
+                (self.ro_slab as *const u32).add((addr & RO_MASK) as usize >> 2)
+            };
+            *ptr
+        }
+    }
+
+    #[inline(always)]
+    pub fn read_u16(&self, addr: u32) -> u16 {
+        unsafe {
+            let ptr = if addr & 0x8000_0000 == 0 {
+                (self.rw_slab as *const u16).add((addr & RW_MASK) as usize >> 1)
+            } else {
+                (self.ro_slab as *const u16).add((addr & RO_MASK) as usize >> 1)
+            };
+            *ptr
+        }
+    }
+
+    #[inline(always)]
     pub fn read_u8(&self, addr: u32) -> u8 {
         unsafe {
-            if addr & 0x8000_0000 == 0 {
-                // RW region
-                *(self.rw_slab as *const u8).add((addr & RW_MASK) as usize)
+            let ptr = if addr & 0x8000_0000 == 0 {
+                (self.rw_slab as *const u8).add((addr & RW_MASK) as usize)
             } else {
-                // RO region
-                *(self.ro_slab as *const u8).add((addr & RO_MASK) as usize)
-            }
+                (self.ro_slab as *const u8).add((addr & RO_MASK) as usize)
+            };
+            *ptr
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_u32(&mut self, addr: u32, value: u32) {
+        unsafe {
+            let ptr = (self.rw_slab as *mut u32).add((addr & RW_MASK) as usize >> 2);
+            *ptr = value;
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_u16(&mut self, addr: u32, value: u16) {
+        unsafe {
+            let ptr = (self.rw_slab as *mut u16).add((addr & RW_MASK) as usize >> 1);
+            *ptr = value;
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_u8(&mut self, addr: u32, value: u8) {
+        unsafe {
+            let ptr = (self.rw_slab as *mut u8).add((addr & RW_MASK) as usize);
+            *ptr = value;
         }
     }
 
@@ -58,24 +105,8 @@ impl VM {
     }
 
     #[inline(always)]
-    pub fn read_u16(&self, addr: u32) -> u16 {
-        let low = self.read_u8(addr) as u16;
-        let high = self.read_u8(addr.wrapping_add(1)) as u16;
-        low | (high << 8)
-    }
-
-    #[inline(always)]
     pub fn read_i16(&self, addr: u32) -> i16 {
         self.read_u16(addr) as i16
-    }
-
-    #[inline(always)]
-    pub fn read_u32(&self, addr: u32) -> u32 {
-        let b0 = self.read_u8(addr) as u32;
-        let b1 = self.read_u8(addr.wrapping_add(1)) as u32;
-        let b2 = self.read_u8(addr.wrapping_add(2)) as u32;
-        let b3 = self.read_u8(addr.wrapping_add(3)) as u32;
-        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
     }
 
     #[inline(always)]
@@ -85,27 +116,6 @@ impl VM {
             let ptr = (self.rw_slab as *const u32).add((self.pc & RW_MASK) as usize >> 2);
             *ptr
         }
-    }
-
-    #[inline(always)]
-    pub fn write_u8(&mut self, addr: u32, value: u8) {
-        unsafe {
-            *((self.rw_slab as *mut u8).add((addr & RW_MASK) as usize)) = value;
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u16(&mut self, addr: u32, value: u16) {
-        self.write_u8(addr, value as u8);
-        self.write_u8(addr.wrapping_add(1), (value >> 8) as u8);
-    }
-
-    #[inline(always)]
-    pub fn write_u32(&mut self, addr: u32, value: u32) {
-        self.write_u8(addr, value as u8);
-        self.write_u8(addr.wrapping_add(1), (value >> 8) as u8);
-        self.write_u8(addr.wrapping_add(2), (value >> 16) as u8);
-        self.write_u8(addr.wrapping_add(3), (value >> 24) as u8);
     }
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
@@ -160,6 +170,7 @@ impl VM {
         };
 
         self.registers[decoded.rd as usize] = out;
+
         self.pc += 4;
         Ok(())
     }
@@ -297,6 +308,7 @@ impl VM {
         }
 
         self.registers[rd as usize] = out;
+
         self.pc = new_pc;
         Ok(())
     }
