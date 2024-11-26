@@ -79,6 +79,15 @@ impl VM {
     }
 
     #[inline(always)]
+    pub fn fetch_instruction(&self) -> u32 {
+        unsafe {
+            // We know PC is in RW region and 4-byte aligned
+            let ptr = (self.rw_slab as *const u32).add((self.pc & RW_MASK) as usize >> 2);
+            *ptr
+        }
+    }
+
+    #[inline(always)]
     pub fn write_u8(&mut self, addr: u32, value: u8) {
         unsafe {
             *((self.rw_slab as *mut u8).add((addr & RW_MASK) as usize)) = value;
@@ -101,7 +110,10 @@ impl VM {
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
         // println!("PC: 0x{:08x}", self.pc);
-        let word = self.read_u32(self.pc);
+
+        // let word = self.read_u32(self.pc);
+        let word = self.fetch_instruction();
+
         // println!("Instruction word: 0x{:08x}", word);
         let decoded = DecodedInstruction::new(word);
         // println!("{:?}", decoded);
