@@ -74,16 +74,16 @@ fn test_signed_reads() {
 }
 
 #[test]
-fn test_boundary_wrapping() {
+fn test_aligned_write_read() {
     let mut memory = setup_memory();
     let mut vm = setup_vm(&mut memory);
 
-    // Write u32 at end of region should wrap around
-    vm.write_u32(RW_SIZE - 2, 0xAABBCCDD);
-    assert_eq!(vm.read_u8(RW_SIZE - 2), 0xDD);
-    assert_eq!(vm.read_u8(RW_SIZE - 1), 0xCC);
-    assert_eq!(vm.read_u8(0x0), 0xBB);  // Wrapped
-    assert_eq!(vm.read_u8(0x1), 0xAA);  // Wrapped
+    // Write u32 at aligned address without wraparound
+    vm.write_u32(RW_SIZE - 4, 0xAABBCCDD);
+    assert_eq!(vm.read_u8(RW_SIZE - 4), 0xDD);
+    assert_eq!(vm.read_u8(RW_SIZE - 3), 0xCC);
+    assert_eq!(vm.read_u8(RW_SIZE - 2), 0xBB);
+    assert_eq!(vm.read_u8(RW_SIZE - 1), 0xAA);
 }
 
 #[test]

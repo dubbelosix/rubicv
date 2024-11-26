@@ -42,7 +42,7 @@ impl VM {
     #[inline(always)]
     pub fn read_u32(&self, addr: u32) -> u32 {
         unsafe {
-            let ptr = if addr & 0x8000_0000 == 0 {
+            let ptr = if addr < RO_START {
                 (self.rw_slab as *const u32).add((addr & RW_MASK) as usize >> 2)
             } else {
                 (self.ro_slab as *const u32).add((addr & RO_MASK) as usize >> 2)
@@ -54,7 +54,7 @@ impl VM {
     #[inline(always)]
     pub fn read_u16(&self, addr: u32) -> u16 {
         unsafe {
-            let ptr = if addr & 0x8000_0000 == 0 {
+            let ptr = if addr < RO_START {
                 (self.rw_slab as *const u16).add((addr & RW_MASK) as usize >> 1)
             } else {
                 (self.ro_slab as *const u16).add((addr & RO_MASK) as usize >> 1)
@@ -66,7 +66,7 @@ impl VM {
     #[inline(always)]
     pub fn read_u8(&self, addr: u32) -> u8 {
         unsafe {
-            let ptr = if addr & 0x8000_0000 == 0 {
+            let ptr = if addr < RO_START {
                 (self.rw_slab as *const u8).add((addr & RW_MASK) as usize)
             } else {
                 (self.ro_slab as *const u8).add((addr & RO_MASK) as usize)
@@ -112,7 +112,8 @@ impl VM {
     #[inline(always)]
     pub fn fetch_instruction(&self) -> u32 {
         unsafe {
-            // We know PC is in RW region and 4-byte aligned
+            // We know PC is in RW region (specifically CODE section) and 4-byte aligned
+            debug_assert!(self.pc >= CODE_START && self.pc < CODE_START + CODE_SIZE);
             let ptr = (self.rw_slab as *const u32).add((self.pc & RW_MASK) as usize >> 2);
             *ptr
         }
