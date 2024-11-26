@@ -295,7 +295,7 @@ impl VM {
             InsnKind::ECALL => {
                 // Standard RISC-V ECALL - returns with value from a0 (x10)
                 // println!("ECALL a0: {} pc: {}",self.registers[10], self.pc);
-                Err(RubicVError::SystemCall(self.registers[10]))
+                Err(RubicVError::SystemCall(self.registers[11]))
             }
             InsnKind::EBREAK => {
                 // Breakpoint exception
