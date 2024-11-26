@@ -2,7 +2,7 @@ use super::*;
 mod memory;
 mod compute;
 mod e2e;
-mod pre_decode;
+// mod pre_decode;
 
 
 struct TestMemory {

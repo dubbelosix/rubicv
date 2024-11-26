@@ -1,55 +1,57 @@
+use crate::errors::RubicVError;
+
 /// TODO: Include Apache 2.0 license header and attribution to RISC0
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u8)]
 pub enum InsnKind {
-    INVALID,
-    ADD,
-    SUB,
-    XOR,
-    OR,
-    AND,
-    SLL,
-    SRL,
-    SRA,
-    SLT,
-    SLTU,
-    ADDI,
-    XORI,
-    ORI,
-    ANDI,
-    SLLI,
-    SRLI,
-    SRAI,
-    SLTI,
-    SLTIU,
-    BEQ,
-    BNE,
-    BLT,
-    BGE,
-    BLTU,
-    BGEU,
-    JAL,
-    JALR,
-    LUI,
-    AUIPC,
-    MUL,
-    MULH,
-    MULHSU,
-    MULHU,
-    DIV,
-    DIVU,
-    REM,
-    REMU,
-    LB,
-    LH,
-    LW,
-    LBU,
-    LHU,
-    SB,
-    SH,
-    SW,
-    ECALL,
-    EBREAK,
-    MRET,
+    INVALID = 0,
+    ADD = 1,
+    SUB = 2,
+    XOR = 3,
+    OR = 4,
+    AND = 5,
+    SLL = 6,
+    SRL = 7,
+    SRA = 8,
+    SLT = 9,
+    SLTU = 10,
+    ADDI = 11,
+    XORI = 12,
+    ORI = 13,
+    ANDI = 14,
+    SLLI = 15,
+    SRLI = 16,
+    SRAI = 17,
+    SLTI = 18,
+    SLTIU = 19,
+    BEQ = 20,
+    BNE = 21,
+    BLT = 22,
+    BGE = 23,
+    BLTU = 24,
+    BGEU = 25,
+    JAL = 26,
+    JALR = 27,
+    LUI = 28,
+    AUIPC = 29,
+    MUL = 30,
+    MULH = 31,
+    MULHSU = 32,
+    MULHU = 33,
+    DIV = 34,
+    DIVU = 35,
+    REM = 36,
+    REMU = 37,
+    LB = 38,
+    LH = 39,
+    LW = 40,
+    LBU = 41,
+    LHU = 42,
+    SB = 43,
+    SH = 44,
+    SW = 45,
+    ECALL = 46,
+    EBREAK = 47,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +73,7 @@ pub struct Instruction {
     pub(crate)  cycles: usize,
 }
 
-type InstructionTable = [Instruction; 49];
+type InstructionTable = [Instruction; 48];
 const fn insn(
     kind: InsnKind,
     category: InsnCategory,
@@ -139,7 +141,6 @@ const RV32IM_ISA: InstructionTable = [
     insn(InsnKind::SW, InsnCategory::Store, 0x23, 0x2, -1, 1),
     insn(InsnKind::ECALL, InsnCategory::System, 0x73, 0x0, 0x00, 1),
     insn(InsnKind::EBREAK, InsnCategory::System, 0x73, 0x0, 0x01, 1),
-    insn(InsnKind::MRET, InsnCategory::System, 0x73, 0x0, 0x18, 1),
 ];
 
 #[derive(Clone, Debug, Default)]
@@ -271,8 +272,8 @@ pub struct PreDecodedInstruction {
     pub imm: u32,
 }
 
-pub fn predecode(code: &[u8], code_start: u32) -> Vec<u8> {
-    let mut predecoded_code = Vec::with_capacity((code.len() / 4) * 8);
+pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
+    let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
     let decoder = FastDecodeTable::new();
 
     let _num_instructions = code.len() / 4;
@@ -340,14 +341,21 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<u8> {
             rs2,
             imm,
         };
-
-        predecoded_code.push(pre_decoded_insn.kind);
-        predecoded_code.push(pre_decoded_insn.rd);
-        predecoded_code.push(pre_decoded_insn.rs1);
-        predecoded_code.push(pre_decoded_insn.rs2);
-        predecoded_code.extend_from_slice(&pre_decoded_insn.imm.to_le_bytes());
+        predecoded_instructions.push(pre_decoded_insn);
     }
 
-    predecoded_code
+    predecoded_instructions
+}
+
+pub fn predecode_binfy(predecoded_insn: &[PreDecodedInstruction]) -> Vec<u8> {
+    let mut predecoded_bytes = Vec::with_capacity(predecoded_insn.len()  * 8);
+    for pinsn in predecoded_insn.iter() {
+        predecoded_bytes.push(pinsn.kind);
+        predecoded_bytes.push(pinsn.rd);
+        predecoded_bytes.push(pinsn.rs1);
+        predecoded_bytes.push(pinsn.rs2);
+        predecoded_bytes.extend_from_slice(&pinsn.imm.to_le_bytes());
+    }
+    predecoded_bytes
 }
 

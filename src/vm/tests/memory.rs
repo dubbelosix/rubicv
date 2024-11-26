@@ -4,6 +4,7 @@ fn setup_vm(memory: &mut TestMemory) -> VM {
     VM::new(
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
+        &[]
     )
 }
 
@@ -28,15 +29,17 @@ fn test_rw_read_write_u8() {
 #[test]
 fn test_ro_read() {
     let mut memory = setup_memory();
+    let mem_begin = memory.ro_slab[0];
+    let mem_end = memory.ro_slab[RO_SIZE as usize - 1];
     let vm = setup_vm(&mut memory);
 
     // Test read from RO region
     let ro_value = vm.read_u8(RO_START);
-    assert_eq!(ro_value, memory.ro_slab[0]);
+    assert_eq!(ro_value, mem_begin);
 
     // Test read from end of RO region
     let ro_end_value = vm.read_u8(RO_START + RO_SIZE - 1);
-    assert_eq!(ro_end_value, memory.ro_slab[RO_SIZE as usize - 1]);
+    assert_eq!(ro_end_value, mem_end);
 }
 
 #[test]

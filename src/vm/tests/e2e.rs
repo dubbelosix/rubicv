@@ -1,9 +1,11 @@
+use crate::instructions::predecode;
 use super::*;
 
 #[test]
 fn test_sum_program() {
     let code = include_bytes!("test_data/sum_n.bin");
-    let code_len = code.len();
+    let pre_decoded_instructions = predecode(code, CODE_START);
+
     let mut memory = setup_memory();
 
     let num_iterations = 10000u32;
@@ -11,12 +13,12 @@ fn test_sum_program() {
     let args = [num_iterations];
     // args are copied into the readonly args section
     memory.ro_slab[..4].copy_from_slice(&args[0].to_le_bytes());
-    memory.rw_slab[..code_len].copy_from_slice(code);
 
     // Create VM instance
     let mut vm = VM::new(
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
+        &pre_decoded_instructions
     );
 
     // Run until completion (should hit ecall)

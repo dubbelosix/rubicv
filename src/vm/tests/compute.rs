@@ -1,3 +1,4 @@
+use crate::instructions::predecode;
 use super::*;
 
 // R-type helper
@@ -27,12 +28,13 @@ unsafe fn zero_memory(mem: &mut [u8]) {
 }
 
 
-fn setup_compute_vm(instruction: u32, registers: &[u32; 32]) -> VM {
+fn setup_compute_vm<'a>(pre_decoded_insn: &'a[PreDecodedInstruction], registers: &'a[u32; 32]) -> VM<'a> {
     let mut memory = setup_memory();
-    memory.rw_slab[0..4].copy_from_slice(&instruction.to_le_bytes());
+
     let mut vm = VM::new(
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
+        pre_decoded_insn
     );
     vm.registers.copy_from_slice(registers);
     vm
@@ -47,11 +49,12 @@ fn test_add() {
     registers[1] = 5;
     registers[2] = 7;
 
-    let mut vm = setup_compute_vm(instruction, &registers);
+    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 12);  // 5 + 7 = 12
-    assert_eq!(vm.pc, CODE_START + 4);
+    assert_eq!(vm.ppc, 1);
 }
 
 #[test]
@@ -62,11 +65,12 @@ fn test_sub() {
     registers[1] = 10;
     registers[2] = 3;
 
-    let mut vm = setup_compute_vm(instruction, &registers);
+    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 7);  // 10 - 3 = 7
-    assert_eq!(vm.pc, CODE_START + 4);
+    assert_eq!(vm.ppc, 1);
 }
 
 #[test]
@@ -76,11 +80,12 @@ fn test_addi() {
     let mut registers = [0u32; 32];
     registers[1] = 10;
 
-    let mut vm = setup_compute_vm(instruction, &registers);
+    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[2], 52);  // 10 + 42 = 52
-    assert_eq!(vm.pc, CODE_START + 4);
+    assert_eq!(vm.ppc, 1);
 }
 
 // #[test]
@@ -133,7 +138,8 @@ fn test_signed_operations() {
     registers[1] = 0xFFFFFFFF;  // -1 in two's complement
     registers[2] = 0;
 
-    let mut vm = setup_compute_vm(instruction, &registers);
+    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 1);  // -1 < 0, so result is 1
