@@ -72,8 +72,6 @@ pub struct Instruction {
 }
 
 type InstructionTable = [Instruction; 49];
-type FastInstructionTable = [u8; 1 << 10];
-
 const fn insn(
     kind: InsnKind,
     category: InsnCategory,
@@ -169,22 +167,22 @@ impl DecodedInstruction {
             opcode: insn & 0x0000007f,
         }
     }
-
+    #[inline(always)]
     pub(crate) fn imm_b(&self) -> u32 {
         (self.top_bit * 0xfffff000)
             | ((self.rd & 1) << 11)
             | ((self.func7 & 0x3f) << 5)
             | (self.rd & 0x1e)
     }
-
+    #[inline(always)]
     pub(crate) fn imm_i(&self) -> u32 {
         (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rs2
     }
-
+    #[inline(always)]
     pub(crate) fn imm_s(&self) -> u32 {
         (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rd
     }
-
+    #[inline(always)]
     pub(crate) fn imm_j(&self) -> u32 {
         (self.top_bit * 0xfff00000)
             | (self.rs1 << 15)
@@ -193,11 +191,13 @@ impl DecodedInstruction {
             | ((self.func7 & 0x3f) << 5)
             | (self.rs2 & 0x1e)
     }
-
+    #[inline(always)]
     pub(crate) fn imm_u(&self) -> u32 {
         self.insn & 0xfffff000
     }
 }
+
+type FastInstructionTable = [Instruction; 1 << 10];
 
 pub struct FastDecodeTable {
     table: FastInstructionTable,
@@ -210,15 +210,7 @@ impl Default for FastDecodeTable {
 }
 
 impl FastDecodeTable {
-    fn new() -> Self {
-        let mut table: FastInstructionTable = [0; 1 << 10];
-        for (isa_idx, insn) in RV32IM_ISA.iter().enumerate() {
-            Self::add_insn(&mut table, insn, isa_idx);
-        }
-        Self { table }
-    }
-
-    // Map to 10 bit format
+    #[inline(always)]
     fn map10(opcode: u32, func3: u32, func7: u32) -> usize {
         let op_high = opcode >> 2;
         // Map 0 -> 0, 1 -> 1, 0x20 -> 2, everything else to 3
@@ -231,28 +223,40 @@ impl FastDecodeTable {
         };
         ((op_high << 5) | (func72bits << 3) | func3) as usize
     }
+    fn new() -> Self {
+        // Initialize with INVALID instruction
+        let invalid_insn = insn(InsnKind::INVALID, InsnCategory::Invalid, 0x00, 0x0, 0x00, 0);
+        let mut table = [invalid_insn; 1 << 10];
 
-    fn add_insn(table: &mut FastInstructionTable, insn: &Instruction, isa_idx: usize) {
+        // Fill table with actual instructions instead of indices
+        for insn in RV32IM_ISA.iter() {
+            Self::add_insn(&mut table, insn);
+        }
+        Self { table }
+    }
+    #[inline(always)]
+    fn add_insn(table: &mut FastInstructionTable, insn: &Instruction) {
         let op_high = insn.opcode >> 2;
         if (insn.func3 as i32) < 0 {
             for f3 in 0..8 {
                 for f7b in 0..4 {
                     let idx = (op_high << 5) | (f7b << 3) | f3;
-                    table[idx as usize] = isa_idx as u8;
+                    table[idx as usize] = *insn;
                 }
             }
         } else if (insn.func7 as i32) < 0 {
             for f7b in 0..4 {
                 let idx = (op_high << 5) | (f7b << 3) | insn.func3;
-                table[idx as usize] = isa_idx as u8;
+                table[idx as usize] = *insn;
             }
         } else {
-            table[Self::map10(insn.opcode, insn.func3, insn.func7)] = isa_idx as u8;
+            table[Self::map10(insn.opcode, insn.func3, insn.func7)] = *insn;
         }
     }
 
+    #[inline(always)]
     pub(crate) fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
-        let isa_idx = self.table[Self::map10(decoded.opcode, decoded.func3, decoded.func7)];
-        RV32IM_ISA[isa_idx as usize]
+        // Direct table lookup, no second array access needed
+        self.table[Self::map10(decoded.opcode, decoded.func3, decoded.func7)]
     }
 }
