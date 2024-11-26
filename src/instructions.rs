@@ -143,7 +143,7 @@ const RV32IM_ISA: InstructionTable = [
 ];
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct DecodedInstruction {
+pub struct DecodedInstruction {
     pub insn: u32,
     pub top_bit: u32,
     pub func7: u32,
@@ -155,7 +155,7 @@ pub(crate) struct DecodedInstruction {
 }
 
 impl DecodedInstruction {
-    pub(crate) fn new(insn: u32) -> Self {
+    pub fn new(insn: u32) -> Self {
         Self {
             insn,
             top_bit: (insn & 0x80000000) >> 31,
@@ -255,8 +255,99 @@ impl FastDecodeTable {
     }
 
     #[inline(always)]
-    pub(crate) fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
+    pub fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
         // Direct table lookup, no second array access needed
         self.table[Self::map10(decoded.opcode, decoded.func3, decoded.func7)]
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Debug)]
+pub struct PreDecodedInstruction {
+    pub kind: u8,
+    pub rd: u8,
+    pub rs1: u8,
+    pub rs2: u8,
+    pub imm: u32,
+}
+
+pub fn predecode(code: &[u8], code_start: u32) -> Vec<u8> {
+    let mut predecoded_code = Vec::with_capacity((code.len() / 4) * 8);
+    let decoder = FastDecodeTable::new();
+
+    let _num_instructions = code.len() / 4;
+
+    for (i, chunk) in code.chunks(4).enumerate() {
+        if chunk.len() < 4 {
+            break;
+        }
+
+        let code_addr = code_start + (i as u32) * 4;
+        let predecoded_offset = (code_addr - code_start) * 2;
+
+
+        let insn_word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        let decoded = DecodedInstruction::new(insn_word);
+        let insn = decoder.lookup(&decoded);
+
+        let kind_u8 = insn.kind as u8;
+        let rd = decoded.rd as u8;
+        let rs1 = decoded.rs1 as u8;
+        let rs2 = decoded.rs2 as u8;
+        let mut imm = 0u32;
+
+        match insn.kind {
+            // Immediate instructions
+            InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI
+            | InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI
+            | InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW
+            | InsnKind::LBU | InsnKind::LHU | InsnKind::JALR => {
+                imm = decoded.imm_i();
+            }
+            // Store instructions
+            InsnKind::SB | InsnKind::SH | InsnKind::SW => {
+                imm = decoded.imm_s();
+            }
+            // Branch instructions
+            InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT | InsnKind::BGE
+            | InsnKind::BLTU | InsnKind::BGEU => {
+                let imm_b = decoded.imm_b() as i32;
+                let target_predecoded_offset = predecoded_offset as i32 + imm_b * 2;
+                imm = target_predecoded_offset as u32;
+            }
+            // JAL instruction
+            InsnKind::JAL => {
+                let imm_j = decoded.imm_j() as i32;
+                let target_predecoded_offset = predecoded_offset as i32 + imm_j * 2;
+                imm = target_predecoded_offset as u32;
+            }
+            // LUI and AUIPC instructions
+            InsnKind::LUI => {
+                imm = decoded.imm_u();
+            }
+            InsnKind::AUIPC => {
+                imm = decoded.imm_u().wrapping_add(code_addr);
+            }
+            // Other instructions
+            _ => {}
+        }
+
+
+        let pre_decoded_insn = PreDecodedInstruction {
+            kind: kind_u8,
+            rd,
+            rs1,
+            rs2,
+            imm,
+        };
+
+        predecoded_code.push(pre_decoded_insn.kind);
+        predecoded_code.push(pre_decoded_insn.rd);
+        predecoded_code.push(pre_decoded_insn.rs1);
+        predecoded_code.push(pre_decoded_insn.rs2);
+        predecoded_code.extend_from_slice(&pre_decoded_insn.imm.to_le_bytes());
+    }
+
+    predecoded_code
+}
+

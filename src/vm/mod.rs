@@ -23,7 +23,6 @@ pub struct VM {
 }
 
 
-
 impl VM {
     pub fn new(ro_slab: *mut [u8],
                rw_slab: *mut [u8],
