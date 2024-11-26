@@ -1,51 +1,55 @@
-/* Memory region definitions with permissions */
 MEMORY {
-    RO_CODE (rx)      : ORIGIN = 0x20000000, LENGTH = 0x60000000
-    RW_HEAP (rw)      : ORIGIN = 0x30000000, LENGTH = 0x0FFFFFFC
-    STACK (rw)        : ORIGIN = 0x30000000, LENGTH = 0x0FFFFFFC  /* Grows down from top */
-    RO_SLAB (r)       : ORIGIN = 0x80000000, LENGTH = 0x10000000
-    RW_SLAB (rw)      : ORIGIN = 0x90000000, LENGTH = 0x10000000
-    RO_ARGS (rw)      : ORIGIN = 0xA0000000, LENGTH = 0x10000000
+   CODE_AND_RODATA (rx) : ORIGIN = 0x00000000, LENGTH = 0x2000    /* 8KB for code */
+   SCRATCH (rw)        : ORIGIN = 0x00002000, LENGTH = 0x100     /* 256 bytes scratch */
+   HEAP_AND_STACK (rw) : ORIGIN = 0x00002100, LENGTH = 0x0DEB0   /* Remaining space ~56KB */
+   RO_SLAB (r)        : ORIGIN = 0x90000000, LENGTH = 0x00400000 /* 4MB read-only slab */
 }
 
-/* Exported symbols for program use */
-_heap_start = 0x30000000;
-_stack_bottom = 0x30000000;  /* Where heap ends and minimum stack address begins */
-_stack_top = 0x3FFFFFFC;     /* Initial stack pointer */
-_ro_slab_start = 0x80000000;
-_rw_slab_start = 0x90000000;
-_ro_args_start = 0xA0000000;
+/* Important addresses for the program */
+_code_start = 0x00000000;    /* Start of code section */
+_scratch_start = 0x00002000; /* Start of scratch space */
+_heap_start = 0x00002100;    /* Start of heap (after scratch) */
+_stack_top  = 0x0000FFFC;    /* Top of stack (end of RW region - 4) */
 
 SECTIONS {
-    /* Code section starts at RO_CODE_START */
-    . = 0x20000000;
-    .text : {
-        *(.text.init)
-        *(.text .text.*)
-    } >RO_CODE
+   /* Code section at beginning of RW region */
+   . = 0x00000000;
+   .text : {
+       *(.text.init)    /* Entry point and initialization */
+       *(.text .text.*) /* Code */
+       *(.eh_frame)     /* Exception handling frame */
+       *(.rodata .rodata.*) /* Read-only data (constants) */
+   } >CODE_AND_RODATA
 
-    .rodata : {
-        *(.rodata .rodata.*)
-    } >RO_CODE
+   /* Scratch space section */
+   . = 0x00002000;
+   .scratch : {
+       *(.scratch .scratch.*) /* Scratch space */
+   } >SCRATCH
 
-    /* Heap starts at RW_HEAP_START */
-    . = 0x30000000;
-    .data : {
-        *(.data .data.*)
-    } >RW_HEAP
+   /* Read-write data section starts after scratch */
+   . = 0x00002100;
+   .data : {
+       *(.data .data.*) /* Initialized data */
+   } >HEAP_AND_STACK
 
-    .bss : {
-        *(.bss .bss.*)
-    } >RW_HEAP
+   .bss : {
+       *(.bss .bss.*)   /* Uninitialized data */
+       *(COMMON)
+   } >HEAP_AND_STACK
 
-    /* Stack grows down from _stack_top */
-    /* Custom slabs are at their respective addresses and accessed directly */
+   /* Sections to discard */
+   /DISCARD/ : {
+       *(.comment)
+       *(.note.*)
+       *(.riscv.attributes)
+   }
 
-    /* Sanity checks */
-    ASSERT(SIZEOF(.text) + SIZEOF(.rodata) < 0x60000000, "Code/rodata too large!")
-    ASSERT(SIZEOF(.data) + SIZEOF(.bss) < 0x0FFFFFFC, "Data/BSS too large!")
-    ASSERT(_stack_top > _stack_bottom, "Stack overlaps with heap!")
+   /* Sanity checks */
+   ASSERT(SIZEOF(.text) <= 0x2000, "Code section exceeds 8KB!")
+   ASSERT(SIZEOF(.scratch) <= 0x100, "Scratch space exceeds 256 bytes!")
+   ASSERT(SIZEOF(.data) + SIZEOF(.bss) <= 0x0DEB0, "Data/BSS too large for heap/stack region!")
 }
 
-/* Define the entry point */
+/* Entry point */
 ENTRY(_start)

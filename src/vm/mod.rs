@@ -3,33 +3,7 @@ mod tests;
 
 use crate::instructions::{DecodedInstruction, FastDecodeTable, InsnCategory, InsnKind};
 use crate::errors::RubicVError;
-use crate::memory_bounds::*;
-
-type ReadSlice<'a> = &'a [u8];
-type WriteSlice = *mut [u8];
-pub struct VM<'a> {
-    pub registers: [u32; 32],
-    pc: u32,
-    pub cycle_count: usize,
-
-    code_memory: ReadSlice<'a>,
-    ro_slab: ReadSlice<'a>,
-    pub rw_slab: WriteSlice,
-    ro_args: ReadSlice<'a>,
-
-    bss_memory_ptr: WriteSlice,
-
-    // Precomputes
-    rw_heap_end: u32,
-    rw_stack_start: u32,
-    rw_stack_end: u32,
-    rw_slab_end: u32,
-    ro_code_end: u32,
-    ro_slab_end: u32,
-    ro_args_end: u32,
-
-    decoder: FastDecodeTable,
-}
+use crate::memory::*;
 
 #[derive(Debug)]
 pub enum ExecutionResult {
@@ -38,253 +12,96 @@ pub enum ExecutionResult {
     CycleLimitExceeded,
     Error(RubicVError),
 }
+pub struct VM {
+    pub registers: [u32; 32],
+    pc: u32,
+    pub cycle_count: usize,
 
-impl VM<'_> {
-    pub fn new<'a>(code_memory: &'a [u8],
-                   ro_slab: &'a [u8],
-                   bss_memory_ptr: *mut [u8],
-                   rw_slab: *mut [u8],
-                   ro_args: &'a [u8],
-                   rw_heap_maxsize: usize,
-                   rw_stack_maxsize: usize,
-                   ro_code_maxsize: usize,
-                   ro_slab_maxsize: usize,
-                   rw_slab_maxsize: usize,
-                   ro_args_maxsize: usize,
+    pub rw_slab: *mut [u8],
+    pub ro_slab: *mut [u8],
+    decoder: FastDecodeTable,
+}
 
-    ) -> VM<'a> {
 
-        // Precompute ranges
-        let rw_heap_end = RW_HEAP_START.checked_add(rw_heap_maxsize as u32)
-            .expect("Heap size overflow");
-        let rw_stack_start = RW_STACK_START.checked_sub(rw_stack_maxsize as u32)
-            .expect("Stack size overflow");
-        let rw_stack_end = RW_STACK_START;
-        let rw_slab_end = RW_CUSTOM_SLAB_START.checked_add(rw_slab_maxsize as u32)
-            .expect("RW slab size overflow");
-        let ro_code_end = RO_CODE_START.checked_add(ro_code_maxsize as u32)
-            .expect("Code size overflow");
-        let ro_slab_end = RO_CUSTOM_SLAB_START.checked_add(ro_slab_maxsize as u32)
-            .expect("RO slab size overflow");
-        let ro_args_end = RO_CUSTOM_ARGS_START.checked_add(ro_args_maxsize as u32)
-            .expect("RO slab size overflow");
+
+impl VM {
+    pub fn new(ro_slab: *mut [u8],
+               rw_slab: *mut [u8],
+    ) -> VM {
 
         VM {
             registers: [0;32],
-            pc: RO_CODE_START,
+            pc: CODE_START,
             cycle_count: 0,
-            code_memory,
-            bss_memory_ptr,
             rw_slab,
             ro_slab,
-            ro_args,
-            rw_heap_end,
-            rw_stack_start,
-            rw_stack_end,
-            rw_slab_end,
-            ro_code_end,
-            ro_slab_end,
-            ro_args_end,
-
             decoder: FastDecodeTable::default()
         }
     }
 
-    pub fn reset(&mut self) {
-        // Zero out registers
-        self.registers = [0; 32];
-        // Reset program counter to start of code
-        self.pc = RO_CODE_START;
-        // Reset cycle count
-        self.cycle_count = 0;
-        // Reset stack pointer
-        self.registers[2] = RW_STACK_START;
-
-        // Zero out heap and stack memory
+    #[inline(always)]
+    pub fn read_u8(&self, addr: u32) -> u8 {
         unsafe {
-            let heap_size = (self.rw_heap_end - RW_HEAP_START) as usize;
-            let stack_size = (self.rw_stack_end - self.rw_stack_start) as usize;
-            if let Some(slice) = (*self.bss_memory_ptr).get_mut(..heap_size + stack_size) {
-                slice.fill(0);
-            }
-        }
-
-        // Zero out RW slab
-        unsafe {
-            if let Some(slice) = (*self.rw_slab).get_mut(..) {
-                slice.fill(0);
-            }
-        }
-    }
-
-
-    #[inline(always)]
-    fn get_region_type(&self, addr: u32) -> u8 {
-        REGION_TABLE[(addr >> 28) as usize]
-    }
-
-    #[inline(always)]
-    fn is_addr_valid_for_writes(&self, addr: u32) -> Result<(WriteSlice, usize), RubicVError> {
-        match self.get_region_type(addr) {
-            REGION_RW => {
-                if addr >= RW_HEAP_START && addr < self.rw_heap_end {
-                    Ok((self.bss_memory_ptr, (addr - RW_HEAP_START) as usize))
-                } else if addr >= self.rw_stack_start && addr < self.rw_stack_end {
-                    Ok((self.bss_memory_ptr, (self.rw_stack_end - addr) as usize))
-                } else if addr >= RW_CUSTOM_SLAB_START && addr < self.rw_slab_end {
-                    Ok((self.rw_slab, (addr - RW_CUSTOM_SLAB_START) as usize))
-                } else {
-                    Err(RubicVError::MemoryWriteOutOfBounds)
-                }
-            }
-            _ => Err(RubicVError::MemoryWriteOutOfBounds),
-        }
-    }
-
-    #[inline(always)]
-    fn is_addr_valid_for_reads(&self, addr: u32) -> Result<(ReadSlice, usize), RubicVError> {
-        match self.get_region_type(addr) {
-            REGION_RW => {
-                if addr >= RW_HEAP_START && addr < self.rw_heap_end {
-                    unsafe {
-                        Ok((&*self.bss_memory_ptr, (addr - RW_HEAP_START) as usize))
-                    }
-                } else if addr >= self.rw_stack_start && addr < self.rw_stack_end {
-                    unsafe {
-                        Ok((&*self.bss_memory_ptr, (self.rw_stack_end - addr) as usize))
-                    }
-                } else if addr >= RW_CUSTOM_SLAB_START && addr < self.rw_slab_end {
-                    unsafe {
-                        Ok((&*self.rw_slab, (addr - RW_CUSTOM_SLAB_START) as usize))
-                    }
-                } else {
-                    Err(RubicVError::MemoryReadOutOfBounds)
-                }
-            }
-            REGION_RO => {
-                if addr >= RO_CODE_START && addr < self.ro_code_end {
-                    Ok((self.code_memory, (addr - RO_CODE_START) as usize))
-                } else if addr >= RO_CUSTOM_SLAB_START && addr < self.ro_slab_end {
-                    Ok((self.ro_slab, (addr - RO_CUSTOM_SLAB_START) as usize))
-                } else if addr >= RO_CUSTOM_ARGS_START && addr < self.ro_args_end {
-                    Ok((self.ro_args, (addr - RO_CUSTOM_ARGS_START) as usize))
-                } else {
-                    Err(RubicVError::MemoryReadOutOfBounds)
-                }
-            }
-            _ => Err(RubicVError::MemoryReadOutOfBounds),
-        }
-    }
-
-    /// Load Byte (signed)
-    #[inline(always)]
-    pub fn read_i8(&self, addr: u32) -> Result<i8, RubicVError> {
-        let (slice, offset) = self.is_addr_valid_for_reads(addr)?;
-        slice.get(offset)
-            .map(|&b| b as i8)
-            .ok_or(RubicVError::MemoryReadOutOfBounds)
-    }
-
-    /// Load Byte Unsigned
-    #[inline(always)]
-    pub fn read_u8(&self, addr: u32) -> Result<u8, RubicVError> {
-        let (slice, offset) = self.is_addr_valid_for_reads(addr)?;
-        slice.get(offset)
-            .copied()
-            .ok_or(RubicVError::MemoryReadOutOfBounds)
-    }
-
-    /// Load Half-word (signed)
-    #[inline(always)]
-    pub fn read_i16(&self, addr: u32) -> Result<i16, RubicVError> {
-        if addr % 2 != 0 {
-            return Err(RubicVError::MemoryMisaligned);
-        }
-        let (slice, offset) = self.is_addr_valid_for_reads(addr)?;
-        if offset + 2 > slice.len() {
-            return Err(RubicVError::MemoryReadOutOfBounds);
-        }
-        Ok(i16::from_le_bytes(slice[offset..offset + 2].try_into().unwrap()))
-    }
-
-    /// Load Half-word Unsigned
-    #[inline(always)]
-    pub fn read_u16(&self, addr: u32) -> Result<u16, RubicVError> {
-        if addr % 2 != 0 {
-            return Err(RubicVError::MemoryMisaligned);
-        }
-        let (slice, offset) = self.is_addr_valid_for_reads(addr)?;
-        if offset + 2 > slice.len() {
-            return Err(RubicVError::MemoryReadOutOfBounds);
-        }
-        Ok(u16::from_le_bytes(slice[offset..offset + 2].try_into().unwrap()))
-    }
-
-    /// Load Word
-    #[inline(always)]
-    pub fn read_u32(&self, addr: u32) -> Result<u32, RubicVError> {
-        if addr % 4 != 0 {
-            return Err(RubicVError::MemoryMisaligned);
-        }
-        let (slice, offset) = self.is_addr_valid_for_reads(addr)?;
-        if offset + 4 > slice.len() {
-            return Err(RubicVError::MemoryReadOutOfBounds);
-        }
-        Ok(u32::from_le_bytes(slice[offset..offset + 4].try_into().unwrap()))
-    }
-
-    /// Store Byte
-    #[inline(always)]
-    pub fn write_u8(&mut self, addr: u32, value: u8) -> Result<(), RubicVError> {
-        let (slice, offset) = self.is_addr_valid_for_writes(addr)?;
-        unsafe {
-            if let Some(target) = (*slice).get_mut(offset) {
-                *target = value;
-                Ok(())
+            if addr & 0x8000_0000 == 0 {
+                // RW region
+                *(self.rw_slab as *const u8).add((addr & RW_MASK) as usize)
             } else {
-                Err(RubicVError::MemoryWriteOutOfBounds)
+                // RO region
+                *(self.ro_slab as *const u8).add((addr & RO_MASK) as usize)
             }
         }
     }
 
-    /// Store Half-word
     #[inline(always)]
-    pub fn write_u16(&mut self, addr: u32, value: u16) -> Result<(), RubicVError> {
-        if addr % 2 != 0 {
-            return Err(RubicVError::MemoryMisaligned);
-        }
-        let (slice, offset) = self.is_addr_valid_for_writes(addr)?;
+    pub fn read_i8(&self, addr: u32) -> i8 {
+        self.read_u8(addr) as i8
+    }
+
+    #[inline(always)]
+    pub fn read_u16(&self, addr: u32) -> u16 {
+        let low = self.read_u8(addr) as u16;
+        let high = self.read_u8(addr.wrapping_add(1)) as u16;
+        low | (high << 8)
+    }
+
+    #[inline(always)]
+    pub fn read_i16(&self, addr: u32) -> i16 {
+        self.read_u16(addr) as i16
+    }
+
+    #[inline(always)]
+    pub fn read_u32(&self, addr: u32) -> u32 {
+        let b0 = self.read_u8(addr) as u32;
+        let b1 = self.read_u8(addr.wrapping_add(1)) as u32;
+        let b2 = self.read_u8(addr.wrapping_add(2)) as u32;
+        let b3 = self.read_u8(addr.wrapping_add(3)) as u32;
+        b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+    }
+
+    #[inline(always)]
+    pub fn write_u8(&mut self, addr: u32, value: u8) {
         unsafe {
-            let slice = &mut (*slice);
-            if offset + 2 > slice.len() {
-                return Err(RubicVError::MemoryWriteOutOfBounds);
-            }
-            slice[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
-            Ok(())
+            *((self.rw_slab as *mut u8).add((addr & RW_MASK) as usize)) = value;
         }
     }
 
-    /// Store Word
     #[inline(always)]
-    pub fn write_u32(&mut self, addr: u32, value: u32) -> Result<(), RubicVError> {
-        // println!("write u32 {} {}", addr, value);
-        if addr % 4 != 0 {
-            return Err(RubicVError::MemoryMisaligned);
-        }
-        let (slice, offset) = self.is_addr_valid_for_writes(addr)?;
-        unsafe {
-            let slice = &mut (*slice);
-            if offset + 4 > slice.len() {
-                return Err(RubicVError::MemoryWriteOutOfBounds);
-            }
-            slice[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-            Ok(())
-        }
+    pub fn write_u16(&mut self, addr: u32, value: u16) {
+        self.write_u8(addr, value as u8);
+        self.write_u8(addr.wrapping_add(1), (value >> 8) as u8);
+    }
+
+    #[inline(always)]
+    pub fn write_u32(&mut self, addr: u32, value: u32) {
+        self.write_u8(addr, value as u8);
+        self.write_u8(addr.wrapping_add(1), (value >> 8) as u8);
+        self.write_u8(addr.wrapping_add(2), (value >> 16) as u8);
+        self.write_u8(addr.wrapping_add(3), (value >> 24) as u8);
     }
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
         // println!("PC: 0x{:08x}", self.pc);
-        let word = self.read_u32(self.pc)?;
+        let word = self.read_u32(self.pc);
         // println!("Instruction word: 0x{:08x}", word);
         let decoded = DecodedInstruction::new(word);
         // println!("{:?}", decoded);
@@ -311,21 +128,21 @@ impl VM<'_> {
 
         let out = match kind {
             InsnKind::LB => {
-                let byte = self.read_u8(addr)?;
+                let byte = self.read_u8(addr);
                 sign_extend(byte as u32, 8)
             }
             InsnKind::LH => {
-                let half = self.read_u16(addr)?;
+                let half = self.read_u16(addr);
                 sign_extend(half as u32, 16)
             }
             InsnKind::LW => {
-                self.read_u32(addr)?
+                self.read_u32(addr)
             }
             InsnKind::LBU => {
-                self.read_u8(addr)? as u32
+                self.read_u8(addr) as u32
             }
             InsnKind::LHU => {
-                self.read_u16(addr)? as u32
+                self.read_u16(addr) as u32
             }
             _ => return Err(RubicVError::IllegalInstruction),
         };
@@ -342,13 +159,13 @@ impl VM<'_> {
 
         match kind {
             InsnKind::SB => {
-                self.write_u8(addr, rs2 as u8)?;
+                self.write_u8(addr, rs2 as u8);
             }
             InsnKind::SH => {
-                self.write_u16(addr, rs2 as u16)?;
+                self.write_u16(addr, rs2 as u16);
             }
             InsnKind::SW => {
-                self.write_u32(addr, rs2)?;
+                self.write_u32(addr, rs2);
             }
             _ => return Err(RubicVError::IllegalInstruction),
         }
@@ -490,7 +307,7 @@ impl VM<'_> {
 
     pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
         self.registers[10] = arg_count;
-        self.registers[2] = RW_STACK_START;
+        self.registers[2] = STACK_START;
 
         loop {
             if let Some(max) = max_cycles {
