@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use core::ops::{Index, IndexMut};
 use crate::instructions::{InsnKind, PreDecodedInstruction};
 use crate::errors::RubicVError;
 use crate::memory::*;
@@ -12,6 +13,7 @@ pub enum ExecutionResult {
     CycleLimitExceeded,
     Error(RubicVError),
 }
+
 pub struct VM<'a> {
     pub registers: [u32; 32],
     pub cycle_count: usize,
@@ -23,7 +25,6 @@ pub struct VM<'a> {
     ppc: usize, // pre-decoded program counter
     pre_decoded_instructions: &'a [PreDecodedInstruction], // pre-decoded store
 }
-
 
 impl VM<'_> {
     pub fn new(ro_slab: *mut [u8],
@@ -112,10 +113,10 @@ impl VM<'_> {
     }
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
-        let pre_decoded_insn = &self.pre_decoded_instructions[self.ppc];
-        self.registers[0] = 0; // Always ensure x0 is 0
-        let rs1 = self.registers[pre_decoded_insn.rs1 as usize];
-        let rs2 = self.registers[pre_decoded_insn.rs2 as usize];
+        let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
+        unsafe { *self.registers.get_unchecked_mut(0) = 0 }; // x0 = 0
+        let rs1 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs1 as usize) };
+        let rs2 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs2 as usize) };
         let rd = pre_decoded_insn.rd;
         let imm = pre_decoded_insn.imm;
 
@@ -154,60 +155,60 @@ impl VM<'_> {
 
             // Jump instructions
             InsnKind::JAL => {
-                out = (self.ppc as u32 + 1) * 8; // Return address
+                out = unsafe { (self.ppc as u32).unchecked_add(1).unchecked_mul(8) };
                 next_ppc = (imm / 8) as usize;
             },
             InsnKind::JALR => {
-                out = (self.ppc as u32 + 1) * 8; // Return address
-                next_ppc = ((rs1.wrapping_add(imm) & !1) / 8) as usize;
+                out = unsafe { (self.ppc as u32).unchecked_add(1).unchecked_mul(8) };
+                next_ppc = ((unsafe { rs1.unchecked_add(imm) } & !1) / 8) as usize;
             },
 
             // Load instructions
             InsnKind::LB => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 out = sign_extend(self.read_u8(addr) as u32, 8);
             },
             InsnKind::LH => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 out = sign_extend(self.read_u16(addr) as u32, 16);
             },
             InsnKind::LW => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 out = self.read_u32(addr);
             },
             InsnKind::LBU => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 out = self.read_u8(addr) as u32;
             },
             InsnKind::LHU => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 out = self.read_u16(addr) as u32;
             },
 
             // Store instructions
             InsnKind::SB => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 self.write_u8(addr, rs2 as u8);
             },
             InsnKind::SH => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 self.write_u16(addr, rs2 as u16);
             },
             InsnKind::SW => {
-                let addr = rs1.wrapping_add(imm);
+                let addr = unsafe { rs1.unchecked_add(imm) };
                 self.write_u32(addr, rs2);
             },
 
             // Other instructions
             InsnKind::LUI => out = imm,
-            InsnKind::AUIPC => out = (self.ppc as u32 * 8).wrapping_add(imm),
+            InsnKind::AUIPC => out = unsafe { (self.ppc as u32).unchecked_mul(8).unchecked_add(imm) },
 
             // System instructions
             InsnKind::ECALL => return Err(RubicVError::SystemCall(self.registers[11])),
             InsnKind::EBREAK => return Err(RubicVError::Breakpoint),
 
             // M extension
-            InsnKind::MUL => out = rs1.wrapping_mul(rs2),
+            InsnKind::MUL => out = unsafe { rs1.unchecked_mul(rs2) },
             InsnKind::MULH => out = ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
             InsnKind::MULHSU => out = ((rs1 as i64).wrapping_mul(rs2 as u64 as i64) >> 32) as u32,
             InsnKind::MULHU => out = ((rs1 as u64).wrapping_mul(rs2 as u64) >> 32) as u32,
@@ -232,13 +233,12 @@ impl VM<'_> {
         }
 
         if !matches!(pre_decoded_insn.kind,
-                            InsnKind::SB | InsnKind::SH | InsnKind::SW |
-                            InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT |
-                            InsnKind::BGE | InsnKind::BLTU | InsnKind::BGEU) {
-            self.registers[rd as usize] = out;
+                InsnKind::SB | InsnKind::SH | InsnKind::SW |
+                InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT |
+                InsnKind::BGE | InsnKind::BLTU | InsnKind::BGEU) {
+            unsafe { *self.registers.get_unchecked_mut(rd as usize) = out };
         }
 
-        // Update PC
         self.ppc = next_ppc;
         self.cycle_count += 1;
 
