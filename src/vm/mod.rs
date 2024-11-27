@@ -122,7 +122,7 @@ impl VM<'_> {
         let mut next_ppc = self.ppc + 1;
         let mut out = 0;
 
-        match unsafe { std::mem::transmute::<u8, InsnKind>(pre_decoded_insn.kind) } {
+        match pre_decoded_insn.kind {
             // Compute instructions
             InsnKind::ADD => out = rs1.wrapping_add(rs2),
             InsnKind::SUB => out = rs1.wrapping_sub(rs2),
@@ -231,7 +231,7 @@ impl VM<'_> {
             _ => return Err(RubicVError::IllegalInstruction),
         }
 
-        if !matches!(unsafe { std::mem::transmute::<u8, InsnKind>(pre_decoded_insn.kind) },
+        if !matches!(pre_decoded_insn.kind,
                             InsnKind::SB | InsnKind::SH | InsnKind::SW |
                             InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT |
                             InsnKind::BGE | InsnKind::BLTU | InsnKind::BGEU) {

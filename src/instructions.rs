@@ -263,7 +263,7 @@ impl FastDecodeTable {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct PreDecodedInstruction {
-    pub kind: u8,
+    pub kind: InsnKind,
     pub rd: u8,
     pub rs1: u8,
     pub rs2: u8,
@@ -289,7 +289,6 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
         let decoded = DecodedInstruction::new(insn_word);
         let insn = decoder.lookup(&decoded);
 
-        let kind_u8 = insn.kind as u8;
         let rd = decoded.rd as u8;
         let rs1 = decoded.rs1 as u8;
         let rs2 = decoded.rs2 as u8;
@@ -333,7 +332,7 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
 
 
         let pre_decoded_insn = PreDecodedInstruction {
-            kind: kind_u8,
+            kind: insn.kind,
             rd,
             rs1,
             rs2,
@@ -348,7 +347,7 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
 pub fn predecode_binfy(predecoded_insn: &[PreDecodedInstruction]) -> Vec<u8> {
     let mut predecoded_bytes = Vec::with_capacity(predecoded_insn.len()  * 8);
     for pinsn in predecoded_insn.iter() {
-        predecoded_bytes.push(pinsn.kind);
+        predecoded_bytes.push(pinsn.kind as u8);
         predecoded_bytes.push(pinsn.rd);
         predecoded_bytes.push(pinsn.rs1);
         predecoded_bytes.push(pinsn.rs2);
