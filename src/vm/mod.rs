@@ -6,6 +6,8 @@ use crate::instructions::{InsnKind, PreDecodedInstruction};
 use crate::errors::RubicVError;
 use crate::memory::*;
 
+const BATCH_SIZE: usize = 100;
+
 #[derive(Debug)]
 pub enum ExecutionResult {
     Success(u32),
@@ -112,6 +114,7 @@ impl VM<'_> {
         self.read_u16(addr) as i16
     }
 
+    #[inline(always)]
     pub fn step(&mut self) -> Result<(), RubicVError> {
         // S
         let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
@@ -148,17 +151,17 @@ impl VM<'_> {
             InsnKind::SLTIU => unsafe { *self.registers.get_unchecked_mut(rd as usize) = if rs1 < imm { 1 } else { 0 } },
 
             // Branch instructions (no register writes)
-            InsnKind::BEQ => if rs1 == rs2 { next_ppc = (imm / 8) as usize },
-            InsnKind::BNE => if rs1 != rs2 { next_ppc = (imm / 8) as usize },
-            InsnKind::BLT => if (rs1 as i32) < (rs2 as i32) { next_ppc = (imm / 8) as usize },
-            InsnKind::BGE => if (rs1 as i32) >= (rs2 as i32) { next_ppc = (imm / 8) as usize },
-            InsnKind::BLTU => if rs1 < rs2 { next_ppc = (imm / 8) as usize },
-            InsnKind::BGEU => if rs1 >= rs2 { next_ppc = (imm / 8) as usize },
+            InsnKind::BEQ => if rs1 == rs2 { next_ppc = (imm >> 3)as usize },
+            InsnKind::BNE => if rs1 != rs2 { next_ppc = (imm >> 3)as usize },
+            InsnKind::BLT => if (rs1 as i32) < (rs2 as i32) { next_ppc = (imm >> 3)as usize },
+            InsnKind::BGE => if (rs1 as i32) >= (rs2 as i32) { next_ppc = (imm >> 3) as usize },
+            InsnKind::BLTU => if rs1 < rs2 { next_ppc = (imm >> 3) as usize },
+            InsnKind::BGEU => if rs1 >= rs2 { next_ppc = (imm >> 3) as usize },
 
             // Jump instructions
             InsnKind::JAL => {
                 unsafe { *self.registers.get_unchecked_mut(rd as usize) = (self.ppc as u32 + 1) * 8 };
-                next_ppc = (imm / 8) as usize;
+                next_ppc = (imm >> 3) as usize;
             },
             InsnKind::JALR => {
                 unsafe { *self.registers.get_unchecked_mut(rd as usize) = (self.ppc as u32 + 1) * 8 };
@@ -271,7 +274,7 @@ impl VM<'_> {
     }
 
 }
-
+#[inline(always)]
 fn sign_extend(value: u32, bits: u32) -> u32 {
     let shift = 32 - bits;
     ((value << shift) as i32 >> shift) as u32
