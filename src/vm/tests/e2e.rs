@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn test_sum_program() {
     let code = include_bytes!("test_data/sum_n.bin");
-    let pre_decoded_instructions = predecode(code, CODE_START);
+    let predecoded_program = predecode(code, CODE_START);
 
     let mut memory = setup_memory();
 
@@ -15,18 +15,19 @@ fn test_sum_program() {
     memory.ro_slab[..4].copy_from_slice(&args[0].to_le_bytes());
 
     // Create VM instance
-    let mut vm = VM::new(
+    let mut vm = VMType::new(
+        predecoded_program.writes_to_x0,
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
-        &pre_decoded_instructions
+        &predecoded_program.instructions
     );
 
     // Run until completion (should hit ecall)
-    match vm.run(args.len() as u32, Some(100000)) {
-        ExecutionResult::Success(result) => unsafe {
+    match vm.as_operations().run(args.len() as u32, Some(100000)) {
+        ExecutionResult::Success(result) => {
             // Check the result in a0 (x10)
             assert_eq!(result, 0);
-            let value = vm.read_u32(0x00002000);
+            let value = vm.as_operations().read_u32(0x00002000);
             assert_eq!(value, (num_iterations-1)*(num_iterations)/2);
         },
         other => panic!("Unexpected execution result: {:?}", other),

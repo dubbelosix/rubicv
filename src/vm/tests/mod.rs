@@ -12,9 +12,9 @@ struct TestMemory {
 
 fn setup_memory() -> TestMemory {
     // stack 64KB
-    let mut rw_slab = [0u8; RW_SIZE as usize];
+    let rw_slab = [0u8; RW_SIZE as usize];
     // 4MB on heap one time, Box for fixed-size
-    let mut ro_slab = vec![0u8; RO_SIZE as usize].into_boxed_slice();
+    let ro_slab = vec![0u8; RO_SIZE as usize].into_boxed_slice();
 
     TestMemory {
         rw_slab,

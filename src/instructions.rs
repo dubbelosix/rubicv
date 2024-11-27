@@ -64,11 +64,13 @@ pub enum InsnCategory {
 #[derive(Clone, Copy, Debug)]
 pub struct Instruction {
     pub(crate)  kind: InsnKind,
-    pub(crate) category: InsnCategory,
+    #[allow(dead_code)]
+    category: InsnCategory,
     pub(crate)  opcode: u32,
     pub(crate)  func3: u32,
     pub(crate)  func7: u32,
-    pub(crate)  cycles: usize,
+    #[allow(dead_code)]
+    cycles: usize,
 }
 
 type InstructionTable = [Instruction; 48];
@@ -270,9 +272,14 @@ pub struct PreDecodedInstruction {
     pub imm: u32,
 }
 
-pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
+pub struct PredecodedProgram {
+    pub instructions: Vec<PreDecodedInstruction>,
+    pub writes_to_x0: bool,
+}
+pub fn predecode(code: &[u8], code_start: u32) -> PredecodedProgram {
     let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
     let decoder = FastDecodeTable::new();
+    let mut writes_to_x0 = false;
 
     let _num_instructions = code.len() / 4;
 
@@ -293,6 +300,25 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
         let rs1 = decoded.rs1 as u8;
         let rs2 = decoded.rs2 as u8;
         let mut imm = 0u32;
+
+        match insn.kind {
+            InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI |
+            InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI |
+            InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW |
+            InsnKind::LBU | InsnKind::LHU | InsnKind::JALR |  // removed JAL
+            InsnKind::LUI | InsnKind::AUIPC | InsnKind::ADD | InsnKind::SUB |
+            InsnKind::SLL | InsnKind::SLT | InsnKind::SLTU | InsnKind::XOR |
+            InsnKind::SRL | InsnKind::SRA | InsnKind::OR | InsnKind::AND => {
+                if rd == 0 {
+                    if !(insn.kind == InsnKind::ADDI && rs1 == 0 && imm == 0) {
+                        if insn_word != 0 {
+                            writes_to_x0 = true;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
 
         match insn.kind {
             // Immediate instructions
@@ -330,7 +356,6 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
             _ => {}
         }
 
-
         let pre_decoded_insn = PreDecodedInstruction {
             kind: insn.kind,
             rd,
@@ -341,7 +366,10 @@ pub fn predecode(code: &[u8], code_start: u32) -> Vec<PreDecodedInstruction> {
         predecoded_instructions.push(pre_decoded_insn);
     }
 
-    predecoded_instructions
+    PredecodedProgram {
+        instructions: predecoded_instructions,
+        writes_to_x0,
+    }
 }
 
 pub fn predecode_binfy(predecoded_insn: &[PreDecodedInstruction]) -> Vec<u8> {

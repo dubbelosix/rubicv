@@ -1,4 +1,4 @@
-use crate::instructions::predecode;
+use crate::instructions::{predecode, PredecodedProgram};
 use super::*;
 
 // R-type helper
@@ -14,27 +14,13 @@ fn encode_i_type(rs1: u32, rd: u32, func3: u32, imm: i32) -> u32 {
     (imm << 20) | (rs1 << 15) | (func3 << 12) | (rd << 7) | opcode
 }
 
-fn encode_branch(rs1: u32, rs2: u32, func3: u32, imm: i32) -> u32 {
-    let opcode = 0x63;  // Branch opcode
-    let imm = (imm as u32) & 0xFFF; // 12-bit immediate
-    let imm115 = (imm >> 5) & 0x7F;
-    let imm40 = imm & 0x1F;
-    (imm115 << 25) | (rs2 << 20) | (rs1 << 15) | (func3 << 12) | (imm40 << 7) | opcode
-}
-
-#[inline(always)]
-unsafe fn zero_memory(mem: &mut [u8]) {
-    mem.fill(0);
-}
-
-
-fn setup_compute_vm<'a>(pre_decoded_insn: &'a[PreDecodedInstruction], registers: &'a[u32; 32]) -> VM<'a> {
+fn setup_compute_vm<'a>(pre_decoded_program: &'a PredecodedProgram, registers: &'a[u32; 32]) -> VM<'a, EnforceZero> {
     let mut memory = setup_memory();
 
-    let mut vm = VM::new(
+    let mut vm = VM::<EnforceZero>::new(
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
-        pre_decoded_insn
+        &pre_decoded_program.instructions
     );
     vm.registers.copy_from_slice(registers);
     vm

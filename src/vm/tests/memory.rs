@@ -1,7 +1,7 @@
 use super::*;
 
-fn setup_vm(memory: &mut TestMemory) -> VM {
-    VM::new(
+fn setup_vm(memory: &mut TestMemory) -> VM<EnforceZero> {
+    VM::<EnforceZero>::new(
         memory.ro_slab.as_mut() as *mut [u8],
         &mut memory.rw_slab as *mut [u8],
         &[]
