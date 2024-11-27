@@ -346,14 +346,24 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
                 );
 
                 if cycle_count >= max {
+                    self.cycle_count = cycle_count as usize;
                     return ExecutionResult::CycleLimitExceeded;
                 }
 
                 match self.step() {
                     Ok(()) => continue,
-                    Err(RubicVError::SystemCall(val)) => return ExecutionResult::Success(val),
-                    Err(RubicVError::Breakpoint) => return ExecutionResult::Breakpoint,
-                    Err(e) => return ExecutionResult::Error(e),
+                    Err(RubicVError::SystemCall(val)) => {
+                        self.cycle_count = cycle_count as usize;
+                        return ExecutionResult::Success(val)
+                    },
+                    Err(RubicVError::Breakpoint) => {
+                        self.cycle_count = cycle_count as usize;
+                        return ExecutionResult::Breakpoint
+                    },
+                    Err(e) => {
+                        self.cycle_count = cycle_count as usize;
+                        return ExecutionResult::Error(e)
+                    },
                 }
             }
         }
