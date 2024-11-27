@@ -1,5 +1,3 @@
-use crate::errors::RubicVError;
-
 /// TODO: Include Apache 2.0 license header and attribution to RISC0
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]

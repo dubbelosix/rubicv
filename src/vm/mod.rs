@@ -122,119 +122,119 @@ impl VM<'_> {
         let mut next_ppc = self.ppc + 1;
         let mut out = 0;
 
-        match pre_decoded_insn.kind {
+        match unsafe { std::mem::transmute::<u8, InsnKind>(pre_decoded_insn.kind) } {
             // Compute instructions
-            x if x == InsnKind::ADD as u8 => out = rs1.wrapping_add(rs2),
-            x if x == InsnKind::SUB as u8 => out = rs1.wrapping_sub(rs2),
-            x if x == InsnKind::XOR as u8 => out = rs1 ^ rs2,
-            x if x == InsnKind::OR as u8 => out = rs1 | rs2,
-            x if x == InsnKind::AND as u8 => out = rs1 & rs2,
-            x if x == InsnKind::SLL as u8 => out = rs1 << (rs2 & 0x1f),
-            x if x == InsnKind::SRL as u8 => out = rs1 >> (rs2 & 0x1f),
-            x if x == InsnKind::SRA as u8 => out = ((rs1 as i32) >> (rs2 & 0x1f)) as u32,
-            x if x == InsnKind::SLT as u8 => out = if (rs1 as i32) < (rs2 as i32) { 1 } else { 0 },
-            x if x == InsnKind::SLTU as u8 => out = if rs1 < rs2 { 1 } else { 0 },
-            x if x == InsnKind::ADDI as u8 => out = rs1.wrapping_add(imm),
-            x if x == InsnKind::XORI as u8 => out = rs1 ^ imm,
-            x if x == InsnKind::ORI as u8 => out = rs1 | imm,
-            x if x == InsnKind::ANDI as u8 => out = rs1 & imm,
-            x if x == InsnKind::SLLI as u8 => out = rs1 << (imm & 0x1f),
-            x if x == InsnKind::SRLI as u8 => out = rs1 >> (imm & 0x1f),
-            x if x == InsnKind::SRAI as u8 => out = ((rs1 as i32) >> (imm & 0x1f)) as u32,
-            x if x == InsnKind::SLTI as u8 => out = if (rs1 as i32) < (imm as i32) { 1 } else { 0 },
-            x if x == InsnKind::SLTIU as u8 => out = if rs1 < imm { 1 } else { 0 },
+            InsnKind::ADD => out = rs1.wrapping_add(rs2),
+            InsnKind::SUB => out = rs1.wrapping_sub(rs2),
+            InsnKind::XOR => out = rs1 ^ rs2,
+            InsnKind::OR => out = rs1 | rs2,
+            InsnKind::AND => out = rs1 & rs2,
+            InsnKind::SLL => out = rs1 << (rs2 & 0x1f),
+            InsnKind::SRL => out = rs1 >> (rs2 & 0x1f),
+            InsnKind::SRA => out = ((rs1 as i32) >> (rs2 & 0x1f)) as u32,
+            InsnKind::SLT => out = if (rs1 as i32) < (rs2 as i32) { 1 } else { 0 },
+            InsnKind::SLTU => out = if rs1 < rs2 { 1 } else { 0 },
+            InsnKind::ADDI => out = rs1.wrapping_add(imm),
+            InsnKind::XORI => out = rs1 ^ imm,
+            InsnKind::ORI => out = rs1 | imm,
+            InsnKind::ANDI => out = rs1 & imm,
+            InsnKind::SLLI => out = rs1 << (imm & 0x1f),
+            InsnKind::SRLI => out = rs1 >> (imm & 0x1f),
+            InsnKind::SRAI => out = ((rs1 as i32) >> (imm & 0x1f)) as u32,
+            InsnKind::SLTI => out = if (rs1 as i32) < (imm as i32) { 1 } else { 0 },
+            InsnKind::SLTIU => out = if rs1 < imm { 1 } else { 0 },
 
             // Branch instructions
-            x if x == InsnKind::BEQ as u8 => if rs1 == rs2 { next_ppc = (imm / 8) as usize },
-            x if x == InsnKind::BNE as u8 => if rs1 != rs2 { next_ppc = (imm / 8) as usize },
-            x if x == InsnKind::BLT as u8 => if (rs1 as i32) < (rs2 as i32) { next_ppc = (imm / 8) as usize },
-            x if x == InsnKind::BGE as u8 => if (rs1 as i32) >= (rs2 as i32) { next_ppc = (imm / 8) as usize },
-            x if x == InsnKind::BLTU as u8 => if rs1 < rs2 { next_ppc = (imm / 8) as usize },
-            x if x == InsnKind::BGEU as u8 => if rs1 >= rs2 { next_ppc = (imm / 8) as usize },
+            InsnKind::BEQ => if rs1 == rs2 { next_ppc = (imm / 8) as usize },
+            InsnKind::BNE => if rs1 != rs2 { next_ppc = (imm / 8) as usize },
+            InsnKind::BLT => if (rs1 as i32) < (rs2 as i32) { next_ppc = (imm / 8) as usize },
+            InsnKind::BGE => if (rs1 as i32) >= (rs2 as i32) { next_ppc = (imm / 8) as usize },
+            InsnKind::BLTU => if rs1 < rs2 { next_ppc = (imm / 8) as usize },
+            InsnKind::BGEU => if rs1 >= rs2 { next_ppc = (imm / 8) as usize },
 
             // Jump instructions
-            x if x == InsnKind::JAL as u8 => {
+            InsnKind::JAL => {
                 out = (self.ppc as u32 + 1) * 8; // Return address
                 next_ppc = (imm / 8) as usize;
             },
-            x if x == InsnKind::JALR as u8 => {
+            InsnKind::JALR => {
                 out = (self.ppc as u32 + 1) * 8; // Return address
                 next_ppc = ((rs1.wrapping_add(imm) & !1) / 8) as usize;
             },
 
             // Load instructions
-            x if x == InsnKind::LB as u8 => {
+            InsnKind::LB => {
                 let addr = rs1.wrapping_add(imm);
                 out = sign_extend(self.read_u8(addr) as u32, 8);
             },
-            x if x == InsnKind::LH as u8 => {
+            InsnKind::LH => {
                 let addr = rs1.wrapping_add(imm);
                 out = sign_extend(self.read_u16(addr) as u32, 16);
             },
-            x if x == InsnKind::LW as u8 => {
+            InsnKind::LW => {
                 let addr = rs1.wrapping_add(imm);
                 out = self.read_u32(addr);
             },
-            x if x == InsnKind::LBU as u8 => {
+            InsnKind::LBU => {
                 let addr = rs1.wrapping_add(imm);
                 out = self.read_u8(addr) as u32;
             },
-            x if x == InsnKind::LHU as u8 => {
+            InsnKind::LHU => {
                 let addr = rs1.wrapping_add(imm);
                 out = self.read_u16(addr) as u32;
             },
 
             // Store instructions
-            x if x == InsnKind::SB as u8 => {
+            InsnKind::SB => {
                 let addr = rs1.wrapping_add(imm);
                 self.write_u8(addr, rs2 as u8);
             },
-            x if x == InsnKind::SH as u8 => {
+            InsnKind::SH => {
                 let addr = rs1.wrapping_add(imm);
                 self.write_u16(addr, rs2 as u16);
             },
-            x if x == InsnKind::SW as u8 => {
+            InsnKind::SW => {
                 let addr = rs1.wrapping_add(imm);
                 self.write_u32(addr, rs2);
             },
 
             // Other instructions
-            x if x == InsnKind::LUI as u8 => out = imm,
-            x if x == InsnKind::AUIPC as u8 => out = (self.ppc as u32 * 8).wrapping_add(imm),
+            InsnKind::LUI => out = imm,
+            InsnKind::AUIPC => out = (self.ppc as u32 * 8).wrapping_add(imm),
 
             // System instructions
-            x if x == InsnKind::ECALL as u8 => return Err(RubicVError::SystemCall(self.registers[11])),
-            x if x == InsnKind::EBREAK as u8 => return Err(RubicVError::Breakpoint),
+            InsnKind::ECALL => return Err(RubicVError::SystemCall(self.registers[11])),
+            InsnKind::EBREAK => return Err(RubicVError::Breakpoint),
 
             // M extension
-            x if x == InsnKind::MUL as u8 => out = rs1.wrapping_mul(rs2),
-            x if x == InsnKind::MULH as u8 => out = ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
-            x if x == InsnKind::MULHSU as u8 => out = ((rs1 as i64).wrapping_mul(rs2 as u64 as i64) >> 32) as u32,
-            x if x == InsnKind::MULHU as u8 => out = ((rs1 as u64).wrapping_mul(rs2 as u64) >> 32) as u32,
-            x if x == InsnKind::DIV as u8 => out = if rs2 == 0 {
+            InsnKind::MUL => out = rs1.wrapping_mul(rs2),
+            InsnKind::MULH => out = ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
+            InsnKind::MULHSU => out = ((rs1 as i64).wrapping_mul(rs2 as u64 as i64) >> 32) as u32,
+            InsnKind::MULHU => out = ((rs1 as u64).wrapping_mul(rs2 as u64) >> 32) as u32,
+            InsnKind::DIV => out = if rs2 == 0 {
                 u32::MAX
             } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
                 rs1
             } else {
                 ((rs1 as i32).wrapping_div(rs2 as i32)) as u32
             },
-            x if x == InsnKind::DIVU as u8 => out = if rs2 == 0 { u32::MAX } else { rs1.wrapping_div(rs2) },
-            x if x == InsnKind::REM as u8 => out = if rs2 == 0 {
+            InsnKind::DIVU => out = if rs2 == 0 { u32::MAX } else { rs1.wrapping_div(rs2) },
+            InsnKind::REM => out = if rs2 == 0 {
                 rs1
             } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
                 0
             } else {
                 ((rs1 as i32).wrapping_rem(rs2 as i32)) as u32
             },
-            x if x == InsnKind::REMU as u8 => out = if rs2 == 0 { rs1 } else { rs1.wrapping_rem(rs2) },
+            InsnKind::REMU => out = if rs2 == 0 { rs1 } else { rs1.wrapping_rem(rs2) },
 
             _ => return Err(RubicVError::IllegalInstruction),
         }
 
-        if !matches!(pre_decoded_insn.kind as u8,
-        x if x == InsnKind::SB as u8 || x == InsnKind::SH as u8 || x == InsnKind::SW as u8 ||
-           x == InsnKind::BEQ as u8 || x == InsnKind::BNE as u8 || x == InsnKind::BLT as u8 ||
-           x == InsnKind::BGE as u8 || x == InsnKind::BLTU as u8 || x == InsnKind::BGEU as u8) {
+        if !matches!(unsafe { std::mem::transmute::<u8, InsnKind>(pre_decoded_insn.kind) },
+                            InsnKind::SB | InsnKind::SH | InsnKind::SW |
+                            InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT |
+                            InsnKind::BGE | InsnKind::BLTU | InsnKind::BGEU) {
             self.registers[rd as usize] = out;
         }
 
