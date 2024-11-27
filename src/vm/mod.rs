@@ -114,38 +114,37 @@ impl VM<'_> {
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
         let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
-        unsafe { *self.registers.get_unchecked_mut(0) = 0 }; // x0 = 0
+        unsafe { *self.registers.get_unchecked_mut(0) = 0 };
         let rs1 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs1 as usize) };
         let rs2 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs2 as usize) };
         let rd = pre_decoded_insn.rd;
         let imm = pre_decoded_insn.imm;
 
         let mut next_ppc = self.ppc + 1;
-        let mut out = 0;
 
         match pre_decoded_insn.kind {
             // Compute instructions
-            InsnKind::ADD => out = rs1.wrapping_add(rs2),
-            InsnKind::SUB => out = rs1.wrapping_sub(rs2),
-            InsnKind::XOR => out = rs1 ^ rs2,
-            InsnKind::OR => out = rs1 | rs2,
-            InsnKind::AND => out = rs1 & rs2,
-            InsnKind::SLL => out = rs1 << (rs2 & 0x1f),
-            InsnKind::SRL => out = rs1 >> (rs2 & 0x1f),
-            InsnKind::SRA => out = ((rs1 as i32) >> (rs2 & 0x1f)) as u32,
-            InsnKind::SLT => out = if (rs1 as i32) < (rs2 as i32) { 1 } else { 0 },
-            InsnKind::SLTU => out = if rs1 < rs2 { 1 } else { 0 },
-            InsnKind::ADDI => out = rs1.wrapping_add(imm),
-            InsnKind::XORI => out = rs1 ^ imm,
-            InsnKind::ORI => out = rs1 | imm,
-            InsnKind::ANDI => out = rs1 & imm,
-            InsnKind::SLLI => out = rs1 << (imm & 0x1f),
-            InsnKind::SRLI => out = rs1 >> (imm & 0x1f),
-            InsnKind::SRAI => out = ((rs1 as i32) >> (imm & 0x1f)) as u32,
-            InsnKind::SLTI => out = if (rs1 as i32) < (imm as i32) { 1 } else { 0 },
-            InsnKind::SLTIU => out = if rs1 < imm { 1 } else { 0 },
+            InsnKind::ADD => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1.wrapping_add(rs2) },
+            InsnKind::SUB => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1.wrapping_sub(rs2) },
+            InsnKind::XOR => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 ^ rs2 },
+            InsnKind::OR => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 | rs2 },
+            InsnKind::AND => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 & rs2 },
+            InsnKind::SLL => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 << (rs2 & 0x1f) },
+            InsnKind::SRL => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 >> (rs2 & 0x1f) },
+            InsnKind::SRA => unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((rs1 as i32) >> (rs2 & 0x1f)) as u32 },
+            InsnKind::SLT => unsafe { *self.registers.get_unchecked_mut(rd as usize) = if (rs1 as i32) < (rs2 as i32) { 1 } else { 0 } },
+            InsnKind::SLTU => unsafe { *self.registers.get_unchecked_mut(rd as usize) = if rs1 < rs2 { 1 } else { 0 } },
+            InsnKind::ADDI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1.wrapping_add(imm) },
+            InsnKind::XORI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 ^ imm },
+            InsnKind::ORI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 | imm },
+            InsnKind::ANDI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 & imm },
+            InsnKind::SLLI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 << (imm & 0x1f) },
+            InsnKind::SRLI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1 >> (imm & 0x1f) },
+            InsnKind::SRAI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((rs1 as i32) >> (imm & 0x1f)) as u32 },
+            InsnKind::SLTI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = if (rs1 as i32) < (imm as i32) { 1 } else { 0 } },
+            InsnKind::SLTIU => unsafe { *self.registers.get_unchecked_mut(rd as usize) = if rs1 < imm { 1 } else { 0 } },
 
-            // Branch instructions
+            // Branch instructions (no register writes)
             InsnKind::BEQ => if rs1 == rs2 { next_ppc = (imm / 8) as usize },
             InsnKind::BNE => if rs1 != rs2 { next_ppc = (imm / 8) as usize },
             InsnKind::BLT => if (rs1 as i32) < (rs2 as i32) { next_ppc = (imm / 8) as usize },
@@ -155,88 +154,89 @@ impl VM<'_> {
 
             // Jump instructions
             InsnKind::JAL => {
-                out = unsafe { (self.ppc as u32).unchecked_add(1).unchecked_mul(8) };
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = (self.ppc as u32 + 1) * 8 };
                 next_ppc = (imm / 8) as usize;
             },
             InsnKind::JALR => {
-                out = unsafe { (self.ppc as u32).unchecked_add(1).unchecked_mul(8) };
-                next_ppc = ((unsafe { rs1.unchecked_add(imm) } & !1) / 8) as usize;
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = (self.ppc as u32 + 1) * 8 };
+                next_ppc = ((rs1.wrapping_add(imm) & !1) / 8) as usize;
             },
 
             // Load instructions
             InsnKind::LB => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
-                out = sign_extend(self.read_u8(addr) as u32, 8);
+                let addr = rs1.wrapping_add(imm);
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = sign_extend(self.read_u8(addr) as u32, 8) };
             },
             InsnKind::LH => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
-                out = sign_extend(self.read_u16(addr) as u32, 16);
+                let addr = rs1.wrapping_add(imm);
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = sign_extend(self.read_u16(addr) as u32, 16) };
             },
             InsnKind::LW => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
-                out = self.read_u32(addr);
+                let addr = rs1.wrapping_add(imm);
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = self.read_u32(addr) };
             },
             InsnKind::LBU => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
-                out = self.read_u8(addr) as u32;
+                let addr = rs1.wrapping_add(imm);
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = self.read_u8(addr) as u32 };
             },
             InsnKind::LHU => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
-                out = self.read_u16(addr) as u32;
+                let addr = rs1.wrapping_add(imm);
+                unsafe { *self.registers.get_unchecked_mut(rd as usize) = self.read_u16(addr) as u32 };
             },
 
-            // Store instructions
+            // Store instructions (no register writes)
             InsnKind::SB => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
+                let addr = rs1.wrapping_add(imm);
                 self.write_u8(addr, rs2 as u8);
             },
             InsnKind::SH => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
+                let addr = rs1.wrapping_add(imm);
                 self.write_u16(addr, rs2 as u16);
             },
             InsnKind::SW => {
-                let addr = unsafe { rs1.unchecked_add(imm) };
+                let addr = rs1.wrapping_add(imm);
                 self.write_u32(addr, rs2);
             },
 
             // Other instructions
-            InsnKind::LUI => out = imm,
-            InsnKind::AUIPC => out = unsafe { (self.ppc as u32).unchecked_mul(8).unchecked_add(imm) },
+            InsnKind::LUI => unsafe { *self.registers.get_unchecked_mut(rd as usize) = imm },
+            InsnKind::AUIPC => unsafe { *self.registers.get_unchecked_mut(rd as usize) = (self.ppc as u32 * 8).wrapping_add(imm) },
 
             // System instructions
             InsnKind::ECALL => return Err(RubicVError::SystemCall(self.registers[11])),
             InsnKind::EBREAK => return Err(RubicVError::Breakpoint),
 
             // M extension
-            InsnKind::MUL => out = unsafe { rs1.unchecked_mul(rs2) },
-            InsnKind::MULH => out = ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
-            InsnKind::MULHSU => out = ((rs1 as i64).wrapping_mul(rs2 as u64 as i64) >> 32) as u32,
-            InsnKind::MULHU => out = ((rs1 as u64).wrapping_mul(rs2 as u64) >> 32) as u32,
-            InsnKind::DIV => out = if rs2 == 0 {
-                u32::MAX
-            } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
-                rs1
-            } else {
-                ((rs1 as i32).wrapping_div(rs2 as i32)) as u32
+            InsnKind::MUL => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1.wrapping_mul(rs2) },
+            InsnKind::MULH => unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32 },
+            InsnKind::MULHSU => unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((rs1 as i64).wrapping_mul(rs2 as u64 as i64) >> 32) as u32 },
+            InsnKind::MULHU => unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((rs1 as u64).wrapping_mul(rs2 as u64) >> 32) as u32 },
+            InsnKind::DIV => unsafe { *self.registers.get_unchecked_mut(rd as usize) =
+                if rs2 == 0 {
+                    u32::MAX
+                } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
+                    rs1
+                } else {
+                    ((rs1 as i32).wrapping_div(rs2 as i32)) as u32
+                }
             },
-            InsnKind::DIVU => out = if rs2 == 0 { u32::MAX } else { rs1.wrapping_div(rs2) },
-            InsnKind::REM => out = if rs2 == 0 {
-                rs1
-            } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
-                0
-            } else {
-                ((rs1 as i32).wrapping_rem(rs2 as i32)) as u32
+            InsnKind::DIVU => unsafe { *self.registers.get_unchecked_mut(rd as usize) =
+                if rs2 == 0 { u32::MAX } else { rs1.wrapping_div(rs2) }
             },
-            InsnKind::REMU => out = if rs2 == 0 { rs1 } else { rs1.wrapping_rem(rs2) },
+            InsnKind::REM => unsafe { *self.registers.get_unchecked_mut(rd as usize) =
+                if rs2 == 0 {
+                    rs1
+                } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
+                    0
+                } else {
+                    ((rs1 as i32).wrapping_rem(rs2 as i32)) as u32
+                }
+            },
+            InsnKind::REMU => unsafe { *self.registers.get_unchecked_mut(rd as usize) =
+                if rs2 == 0 { rs1 } else { rs1.wrapping_rem(rs2) }
+            },
 
             _ => return Err(RubicVError::IllegalInstruction),
-        }
-
-        if !matches!(pre_decoded_insn.kind,
-                InsnKind::SB | InsnKind::SH | InsnKind::SW |
-                InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT |
-                InsnKind::BGE | InsnKind::BLTU | InsnKind::BGEU) {
-            unsafe { *self.registers.get_unchecked_mut(rd as usize) = out };
         }
 
         self.ppc = next_ppc;
@@ -246,16 +246,16 @@ impl VM<'_> {
     }
 
     pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
-        self.registers[10] = arg_count;
-        self.registers[2] = STACK_START;
+        unsafe {
+            *self.registers.get_unchecked_mut(10) = arg_count;
+            *self.registers.get_unchecked_mut(2) = STACK_START;
+        }
 
+        let max = max_cycles.unwrap_or(u32::MAX);
         loop {
-            if let Some(max) = max_cycles {
-                if self.cycle_count >= max as usize {
-                    return ExecutionResult::CycleLimitExceeded;
-                }
+            if self.cycle_count >= max as usize {
+                return ExecutionResult::CycleLimitExceeded;
             }
-
             match self.step() {
                 Ok(()) => continue,
                 Err(RubicVError::SystemCall(val)) => return ExecutionResult::Success(val),
