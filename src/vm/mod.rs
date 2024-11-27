@@ -2,6 +2,8 @@
 mod tests;
 
 use core::marker::PhantomData;
+#[cfg(target_os = "zkvm")]
+use core::arch::asm;
 use crate::instructions::{InsnKind, PreDecodedInstruction};
 use crate::errors::RubicVError;
 use crate::memory::*;
@@ -328,13 +330,41 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
         Ok(())
     }
 
+    #[cfg(target_os = "zkvm")]
+    pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
+        unsafe {
+            *self.registers.get_unchecked_mut(10) = arg_count;
+            *self.registers.get_unchecked_mut(2) = STACK_START;
+
+            let max = max_cycles.unwrap_or(u32::MAX);
+            let mut cycle_count: u32 = 0;
+
+            loop {
+                asm!(
+                "addi {0}, {0}, 1",
+                inout(reg) cycle_count,
+                );
+
+                if cycle_count >= max {
+                    return ExecutionResult::CycleLimitExceeded;
+                }
+
+                match self.step() {
+                    Ok(()) => continue,
+                    Err(RubicVError::SystemCall(val)) => return ExecutionResult::Success(val),
+                    Err(RubicVError::Breakpoint) => return ExecutionResult::Breakpoint,
+                    Err(e) => return ExecutionResult::Error(e),
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "zkvm"))]
     pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
         unsafe {
             *self.registers.get_unchecked_mut(10) = arg_count;
             *self.registers.get_unchecked_mut(2) = STACK_START;
         }
         let max = max_cycles.unwrap_or(u32::MAX);
-
 
         loop {
             self.cycle_count += 1;
