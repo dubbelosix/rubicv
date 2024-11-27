@@ -113,13 +113,16 @@ impl VM<'_> {
     }
 
     pub fn step(&mut self) -> Result<(), RubicVError> {
+        // S
         let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
         unsafe { *self.registers.get_unchecked_mut(0) = 0 };
         let rs1 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs1 as usize) };
         let rs2 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs2 as usize) };
         let rd = pre_decoded_insn.rd;
         let imm = pre_decoded_insn.imm;
+        // 33
 
+        // S
         let mut next_ppc = self.ppc + 1;
 
         match pre_decoded_insn.kind {
@@ -238,10 +241,12 @@ impl VM<'_> {
 
             _ => return Err(RubicVError::IllegalInstruction),
         }
+        // 33
 
+        // S
         self.ppc = next_ppc;
         self.cycle_count += 1;
-
+        // 21
         Ok(())
     }
 
@@ -250,8 +255,8 @@ impl VM<'_> {
             *self.registers.get_unchecked_mut(10) = arg_count;
             *self.registers.get_unchecked_mut(2) = STACK_START;
         }
-
         let max = max_cycles.unwrap_or(u32::MAX);
+
         loop {
             if self.cycle_count >= max as usize {
                 return ExecutionResult::CycleLimitExceeded;
