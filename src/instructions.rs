@@ -168,33 +168,54 @@ impl DecodedInstruction {
             opcode: insn & 0x0000007f,
         }
     }
-    #[inline(always)]
-    pub(crate) fn imm_b(&self) -> u32 {
-        (self.top_bit * 0xfffff000)
-            | ((self.rd & 1) << 11)
-            | ((self.func7 & 0x3f) << 5)
-            | (self.rd & 0x1e)
+    // Sign-extend a value based on the number of bits
+    fn sign_extend(value: u32, bits: u32) -> i32 {
+        let shift = 32 - bits;
+        ((value << shift) as i32) >> shift
     }
+
+    // Extract and reconstruct the B-type immediate (for branch instructions)
     #[inline(always)]
-    pub(crate) fn imm_i(&self) -> u32 {
-        (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rs2
+    pub(crate) fn imm_b(&self) -> i32 {
+        let imm12 = (self.insn & 0x80000000) >> 31;
+        let imm10_5 = (self.insn & 0x7E000000) >> 25;
+        let imm4_1 = (self.insn & 0x00000F00) >> 8;
+        let imm11 = (self.insn & 0x00000080) >> 7;
+        let imm = (imm12 << 12) | (imm11 << 11) | (imm10_5 << 5) | (imm4_1 << 1);
+        Self::sign_extend(imm, 13)
     }
+
+    // Extract and reconstruct the J-type immediate (for JAL instruction)
     #[inline(always)]
-    pub(crate) fn imm_s(&self) -> u32 {
-        (self.top_bit * 0xfffff000) | (self.func7 << 5) | self.rd
+    pub(crate) fn imm_j(&self) -> i32 {
+        let imm20 = (self.insn & 0x80000000) >> 31;
+        let imm19_12 = (self.insn & 0x000FF000) >> 12;
+        let imm11 = (self.insn & 0x00100000) >> 20;
+        let imm10_1 = (self.insn & 0x7FE00000) >> 21;
+        let imm = (imm20 << 20) | (imm19_12 << 12) | (imm11 << 11) | (imm10_1 << 1);
+        Self::sign_extend(imm, 21)
     }
+
+    // Extract and reconstruct the I-type immediate (for ALU and load instructions)
     #[inline(always)]
-    pub(crate) fn imm_j(&self) -> u32 {
-        (self.top_bit * 0xfff00000)
-            | (self.rs1 << 15)
-            | (self.func3 << 12)
-            | ((self.rs2 & 1) << 11)
-            | ((self.func7 & 0x3f) << 5)
-            | (self.rs2 & 0x1e)
+    pub(crate) fn imm_i(&self) -> i32 {
+        let imm = (self.insn & 0xFFF00000) >> 20;
+        Self::sign_extend(imm, 12)
     }
+
+    // Extract and reconstruct the S-type immediate (for store instructions)
+    #[inline(always)]
+    pub(crate) fn imm_s(&self) -> i32 {
+        let imm11_5 = (self.insn & 0xFE000000) >> 25;
+        let imm4_0 = (self.insn & 0x00000F80) >> 7;
+        let imm = (imm11_5 << 5) | imm4_0;
+        Self::sign_extend(imm, 12)
+    }
+
+    // Extract the U-type immediate (for LUI and AUIPC instructions)
     #[inline(always)]
     pub(crate) fn imm_u(&self) -> u32 {
-        self.insn & 0xfffff000
+        self.insn & 0xFFFFF000
     }
 }
 
@@ -269,7 +290,7 @@ pub struct PreDecodedInstruction {
     pub rd: u8,
     pub rs1: u8,
     pub rs2: u8,
-    pub imm: u32,
+    pub imm: i32,
 }
 
 pub struct PredecodedProgram {
@@ -281,16 +302,13 @@ pub fn predecode(code: &[u8], code_start: u32) -> PredecodedProgram {
     let decoder = FastDecodeTable::new();
     let mut writes_to_x0 = false;
 
-    let _num_instructions = code.len() / 4;
-
     for (i, chunk) in code.chunks(4).enumerate() {
         if chunk.len() < 4 {
             break;
         }
 
-        let code_addr = code_start + (i as u32) * 4;
-        let predecoded_offset = (code_addr - code_start) * 2;
-
+        // Code address is 0
+        let predecoded_offset = i as i32;
 
         let insn_word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
         let decoded = DecodedInstruction::new(insn_word);
@@ -299,8 +317,9 @@ pub fn predecode(code: &[u8], code_start: u32) -> PredecodedProgram {
         let rd = decoded.rd as u8;
         let rs1 = decoded.rs1 as u8;
         let rs2 = decoded.rs2 as u8;
-        let mut imm = 0u32;
+        let mut imm = 0i32;
 
+        // Check for writes to x0
         match insn.kind {
             InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI |
             InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI |
@@ -335,24 +354,32 @@ pub fn predecode(code: &[u8], code_start: u32) -> PredecodedProgram {
             // Branch instructions
             InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT | InsnKind::BGE
             | InsnKind::BLTU | InsnKind::BGEU => {
-                let imm_b = decoded.imm_b() as i32;
-                let target_predecoded_offset = predecoded_offset as i32 + imm_b * 2;
-                imm = target_predecoded_offset as u32;
+                let imm_b = decoded.imm_b();
+                let target_index = predecoded_offset + (imm_b / 4);
+                imm = target_index;
             }
             // JAL instruction
             InsnKind::JAL => {
-                let imm_j = decoded.imm_j() as i32;
-                let target_predecoded_offset = predecoded_offset as i32 + imm_j * 2;
-                imm = target_predecoded_offset as u32;
+                let imm_j = decoded.imm_j();
+                let target_index = predecoded_offset + (imm_j / 4);
+                imm = target_index;
             }
             // LUI and AUIPC instructions
             InsnKind::LUI => {
-                imm = decoded.imm_u();
+                imm = decoded.imm_u() as i32;
             }
             InsnKind::AUIPC => {
-                imm = decoded.imm_u().wrapping_add(code_addr);
+                imm = decoded.imm_u() as i32;
             }
-            // Other instructions
+            // Other instructions (compute, system, etc.)
+            InsnKind::ADD | InsnKind::SUB | InsnKind::XOR | InsnKind::OR | InsnKind::AND
+            | InsnKind::SLL | InsnKind::SRL | InsnKind::SRA | InsnKind::SLT
+            | InsnKind::SLTU | InsnKind::MUL | InsnKind::MULH | InsnKind::MULHSU
+            | InsnKind::MULHU | InsnKind::DIV | InsnKind::DIVU | InsnKind::REM
+            | InsnKind::REMU => {
+                // No immediate needed; set imm to 0
+                imm = 0;
+            }
             _ => {}
         }
 
