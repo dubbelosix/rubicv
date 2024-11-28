@@ -15,11 +15,14 @@
 // 256MB = 0x1000_0000 (mask: 0x0FFF_FFFF)
 
 pub const RW_START: u32 = 0x0000_0000;
-pub const RW_SIZE: u32 = 0x0001_0000;
-pub const RW_MASK: u32 = RW_SIZE - 1;
-pub const RO_START: u32 = 0x9000_0000;
-pub const RO_MASK: u32 = RO_SIZE - 1;
-pub const RO_SIZE: u32 = 0x0040_0000;
+pub const RW_SIZE: u32 = 0x0001_0000; // 64KB
+pub const RW_MASK: u32 = RW_SIZE - 1; // 0x0000_FFFF
+
+pub const RO_START: u32 = RW_SIZE; // 0x0001_0000
+pub const RO_SIZE: u32 = 0x003F_0000; // 4MB - 64KB = 0x003F_0000
+
+pub const MEMORY_SIZE: u32 = RW_SIZE + RO_SIZE; // 0x0040_0000 (4MB)
+pub const MEMORY_MASK: u32 = MEMORY_SIZE - 1; // 0x003F_FFFF
 
 pub const CODE_START: u32 = RW_START;
 pub const CODE_SIZE: u32 = 0x0000_2000;  // 8KB
@@ -27,9 +30,11 @@ pub const CODE_SIZE: u32 = 0x0000_2000;  // 8KB
 pub const SCRATCH_SIZE: u32 = 256;
 pub const SCRATCH_START: u32 = CODE_START + CODE_SIZE;
 
-pub const HEAP_START: u32 = CODE_START + CODE_SIZE + SCRATCH_SIZE;
+pub const HEAP_START: u32 = SCRATCH_START + SCRATCH_SIZE;
 
 pub const STACK_START: u32 = RW_START + RW_SIZE - 4;
+
+
 
 
 

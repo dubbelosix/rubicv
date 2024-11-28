@@ -2,8 +2,7 @@ use super::*;
 
 fn setup_vm(memory: &mut TestMemory) -> VM<EnforceZero> {
     VM::<EnforceZero>::new(
-        memory.ro_slab.as_mut() as *mut [u8],
-        &mut memory.rw_slab as *mut [u8],
+        memory.memory_slab.as_mut() as *mut [u8],
         &[]
     )
 }
@@ -29,8 +28,8 @@ fn test_rw_read_write_u8() {
 #[test]
 fn test_ro_read() {
     let mut memory = setup_memory();
-    let mem_begin = memory.ro_slab[0];
-    let mem_end = memory.ro_slab[RO_SIZE as usize - 1];
+    let mem_begin = memory.memory_slab[RO_START as usize];
+    let mem_end = memory.memory_slab[(RO_START+RO_SIZE) as usize - 1];
     let vm = setup_vm(&mut memory);
 
     // Test read from RO region

@@ -82,13 +82,12 @@ impl<'a> VMType<'a> {
 
 impl<'a> VMType<'a> {
     pub fn new(writes_to_x0: bool,
-           ro_slab: *mut [u8],
-           rw_slab: *mut [u8],
+           memory_slab: *mut [u8],
            instructions: &'a [PreDecodedInstruction]) -> Self {
         if writes_to_x0 {
-            Self::Enforced(VM::<EnforceZero>::new(ro_slab, rw_slab, instructions))
+            Self::Enforced(VM::<EnforceZero>::new(memory_slab, instructions))
         } else {
-            Self::NotEnforced(VM::<NoEnforceZero>::new(ro_slab, rw_slab, instructions))
+            Self::NotEnforced(VM::<NoEnforceZero>::new(memory_slab, instructions))
         }
     }
 }
@@ -97,9 +96,9 @@ pub struct VM<'a, T: ZeroEnforcement> {
     pub registers: [u32; 32],
     pub cycle_count: usize,
 
-    pub rw_slab: *mut [u8],
-    // writes are prevented anyway, but make this a const ptr sometime
-    pub ro_slab: *mut [u8],
+    // writes are prevented w/ wraparound
+    pub memory_slab: *mut [u8],
+
 
     ppc: usize, // pre-decoded program counter
     pre_decoded_instructions: &'a [PreDecodedInstruction], // pre-decoded store
@@ -107,15 +106,13 @@ pub struct VM<'a, T: ZeroEnforcement> {
 }
 
 impl<'a, T: ZeroEnforcement> VM<'a, T> {
-    pub fn new(ro_slab: *mut [u8],
-               rw_slab: *mut [u8],
+    pub fn new(memory_slab: *mut [u8],
                pre_decoded_instructions: &[PreDecodedInstruction],
     ) -> VM<T> {
             VM::<T> {
                 registers: [0; 32],
                 cycle_count: 0,
-                rw_slab,
-                ro_slab,
+                memory_slab,
                 ppc: 0,
                 pre_decoded_instructions,
                 _phantom: PhantomData,
@@ -125,11 +122,8 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn read_u32(&self, addr: u32) -> u32 {
         unsafe {
-            let ptr = if addr < RO_START {
-                (self.rw_slab as *const u32).add((addr & RW_MASK) as usize >> 2)
-            } else {
-                (self.ro_slab as *const u32).add((addr & RO_MASK) as usize >> 2)
-            };
+            let index = (addr & MEMORY_MASK) as usize >> 2; // Divide by 4
+            let ptr = (self.memory_slab as *const u32).add(index);
             *ptr
         }
     }
@@ -137,11 +131,8 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn read_u16(&self, addr: u32) -> u16 {
         unsafe {
-            let ptr = if addr < RO_START {
-                (self.rw_slab as *const u16).add((addr & RW_MASK) as usize >> 1)
-            } else {
-                (self.ro_slab as *const u16).add((addr & RO_MASK) as usize >> 1)
-            };
+            let index = (addr & MEMORY_MASK) as usize >> 1; // Divide by 2
+            let ptr = (self.memory_slab as *const u16).add(index);
             *ptr
         }
     }
@@ -149,36 +140,8 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn read_u8(&self, addr: u32) -> u8 {
         unsafe {
-            let ptr = if addr < RO_START {
-                (self.rw_slab as *const u8).add((addr & RW_MASK) as usize)
-            } else {
-                (self.ro_slab as *const u8).add((addr & RO_MASK) as usize)
-            };
-            *ptr
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u32(&mut self, addr: u32, value: u32) {
-        unsafe {
-            let ptr = (self.rw_slab as *mut u32).add((addr & RW_MASK) as usize >> 2);
-            *ptr = value;
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u16(&mut self, addr: u32, value: u16) {
-        unsafe {
-            let ptr = (self.rw_slab as *mut u16).add((addr & RW_MASK) as usize >> 1);
-            *ptr = value;
-        }
-    }
-
-    #[inline(always)]
-    pub fn write_u8(&mut self, addr: u32, value: u8) {
-        unsafe {
-            let ptr = (self.rw_slab as *mut u8).add((addr & RW_MASK) as usize);
-            *ptr = value;
+            let index = (addr & MEMORY_MASK) as usize;
+            *(self.memory_slab as *const u8).add(index)
         }
     }
 
@@ -190,6 +153,32 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn read_i16(&self, addr: u32) -> i16 {
         self.read_u16(addr) as i16
+    }
+
+    #[inline(always)]
+    pub fn write_u32(&mut self, addr: u32, value: u32) {
+        unsafe {
+            let index = (addr & RW_MASK) as usize >> 2; // Divide by 4
+            let ptr = (self.memory_slab as *mut u32).add(index);
+            *ptr = value;
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_u16(&mut self, addr: u32, value: u16) {
+        unsafe {
+            let index = (addr & RW_MASK) as usize >> 1; // Divide by 2
+            let ptr = (self.memory_slab as *mut u16).add(index);
+            *ptr = value;
+        }
+    }
+
+    #[inline(always)]
+    pub fn write_u8(&mut self, addr: u32, value: u8) {
+        unsafe {
+            let index = (addr & RW_MASK) as usize;
+            *(self.memory_slab as *mut u8).add(index) = value;
+        }
     }
 
     #[inline(always)]

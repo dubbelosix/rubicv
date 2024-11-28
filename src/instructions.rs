@@ -297,7 +297,7 @@ pub struct PredecodedProgram {
     pub instructions: Vec<PreDecodedInstruction>,
     pub writes_to_x0: bool,
 }
-pub fn predecode(code: &[u8], code_start: u32) -> PredecodedProgram {
+pub fn predecode(code: &[u8], _code_start: u32) -> PredecodedProgram {
     let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
     let decoder = FastDecodeTable::new();
     let mut writes_to_x0 = false;

@@ -18,8 +18,7 @@ fn setup_compute_vm<'a>(pre_decoded_program: &'a PredecodedProgram, registers: &
     let mut memory = setup_memory();
 
     let mut vm = VM::<EnforceZero>::new(
-        memory.ro_slab.as_mut() as *mut [u8],
-        &mut memory.rw_slab as *mut [u8],
+        memory.memory_slab.as_mut() as *mut [u8],
         &pre_decoded_program.instructions
     );
     vm.registers.copy_from_slice(registers);
@@ -73,48 +72,6 @@ fn test_addi() {
     assert_eq!(vm.registers[2], 52);  // 10 + 42 = 52
     assert_eq!(vm.ppc, 1);
 }
-
-// #[test]
-// fn test_x0_remains_zero() {
-//     unsafe {
-//         // Zero memory first
-//         TEST_MEMORY.fill(0);
-//         RO_SLAB.fill(0);
-//         BSS_MEMORY.fill(0);
-//         RW_SLAB.fill(0);
-//         RO_ARGS.fill(0);
-//
-//         // Setup both instructions
-//         let add_instruction = encode_r_type(1, 2, 0, 0x0, 0x00);
-//         let bne_instruction = encode_branch(0, 0, 0x1, 8);
-//
-//         // Write both instructions to memory
-//         TEST_MEMORY[0..4].copy_from_slice(&add_instruction.to_le_bytes());
-//         TEST_MEMORY[4..8].copy_from_slice(&bne_instruction.to_le_bytes());
-//
-//         let mut registers = [0u32; 32];
-//         registers[1] = 5;
-//         registers[2] = 7;
-//
-//         // Create VM with the complete test memory
-//         let mut vm = VM::new(
-//             &TEST_MEMORY,
-//             &RO_SLAB,
-//             &mut BSS_MEMORY as *mut [u8],
-//             &mut RW_SLAB as *mut [u8],
-//             &RO_ARGS,
-//             TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM, TEST_MEM,TEST_MEM
-//         );
-//         vm.registers.copy_from_slice(&registers);
-//
-//         // Execute both instructions
-//         vm.step().unwrap();
-//         vm.step().unwrap();
-//
-//         assert_eq!(vm.pc, RO_CODE_START + 8);
-//         assert_eq!(vm.registers[0], 0);  // Extra check that x0 is still 0
-//     }
-// }
 
 #[test]
 fn test_signed_operations() {

@@ -11,14 +11,14 @@ fn test_sum_program() {
     let num_iterations = 10000u32;
 
     let args = [num_iterations];
+    let ro_mem_start = RO_START as usize;
     // args are copied into the readonly args section
-    memory.ro_slab[..4].copy_from_slice(&args[0].to_le_bytes());
+    memory.memory_slab[ro_mem_start..ro_mem_start+4].copy_from_slice(&args[0].to_le_bytes());
 
     // Create VM instance
     let mut vm = VMType::new(
         predecoded_program.writes_to_x0,
-        memory.ro_slab.as_mut() as *mut [u8],
-        &mut memory.rw_slab as *mut [u8],
+        memory.memory_slab.as_mut() as *mut [u8],
         &predecoded_program.instructions
     );
 

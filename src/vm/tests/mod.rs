@@ -6,18 +6,14 @@ mod e2e;
 
 
 struct TestMemory {
-    ro_slab: Box<[u8]>,                 // One-time 4MB heap allocation, fixed size
-    rw_slab: [u8; RW_SIZE as usize],    // 64KB on stack, truly static
+    memory_slab: Box<[u8]>, // One-time 4MB heap allocation, fixed size
 }
 
 fn setup_memory() -> TestMemory {
-    // stack 64KB
-    let rw_slab = [0u8; RW_SIZE as usize];
     // 4MB on heap one time, Box for fixed-size
-    let ro_slab = vec![0u8; RO_SIZE as usize].into_boxed_slice();
+    let memory_slab = vec![0u8; MEMORY_SIZE as usize].into_boxed_slice();
 
     TestMemory {
-        rw_slab,
-        ro_slab,
+        memory_slab
     }
 }
