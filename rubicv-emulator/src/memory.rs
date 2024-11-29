@@ -20,20 +20,23 @@ pub const RW_MASK: u32 = RW_SIZE - 1; // 0x0000_FFFF
 
 pub const RO_START: u32 = RW_SIZE; // 0x0001_0000
 pub const RO_SIZE: u32 = 0x003F_0000; // 4MB - 64KB = 0x003F_0000
-
 pub const MEMORY_SIZE: u32 = RW_SIZE + RO_SIZE; // 0x0040_0000 (4MB)
 pub const MEMORY_MASK: u32 = MEMORY_SIZE - 1; // 0x003F_FFFF
 
 pub const CODE_START: u32 = RW_START;
 pub const CODE_SIZE: u32 = 0x0000_2000;  // 8KB
 
-pub const SCRATCH_SIZE: u32 = 256;
-pub const SCRATCH_START: u32 = CODE_START + CODE_SIZE;
-
 pub const HEAP_START: u32 = SCRATCH_START + SCRATCH_SIZE;
 
 pub const STACK_START: u32 = RW_START + RW_SIZE - 4;
 
+// SDK used constants
+pub const SCRATCH_SIZE: u32 = 256;
+pub const SCRATCH_START: u32 = CODE_START + CODE_SIZE;
+pub const ARGS_SIZE: u32 = 256;
+pub const ARGS_START: u32 = RO_START;
+pub const RO_SLAB_START: u32 = ARGS_START + ARGS_SIZE;
+pub const RO_SLAB_SIZE: u32 = RO_SIZE - ARGS_SIZE;
 
 
 

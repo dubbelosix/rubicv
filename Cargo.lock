@@ -3,5 +3,9 @@
 version = 3
 
 [[package]]
-name = "rubicv"
+name = "rubicv-emulator"
+version = "0.1.0"
+
+[[package]]
+name = "rubicv-sdk"
 version = "0.1.0"

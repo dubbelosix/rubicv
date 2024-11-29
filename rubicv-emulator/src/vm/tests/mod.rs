@@ -4,6 +4,9 @@ mod compute;
 mod e2e;
 // mod pre_decode;
 
+use alloc::vec;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 struct TestMemory {
     memory_slab: Box<[u8]>, // One-time 4MB heap allocation, fixed size

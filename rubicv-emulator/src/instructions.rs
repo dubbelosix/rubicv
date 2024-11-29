@@ -1,4 +1,5 @@
-/// TODO: Include Apache 2.0 license header and attribution to RISC0
+use alloc::vec::Vec;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 pub enum InsnKind {
@@ -398,16 +399,3 @@ pub fn predecode(code: &[u8], _code_start: u32) -> PredecodedProgram {
         writes_to_x0,
     }
 }
-
-pub fn predecode_binfy(predecoded_insn: &[PreDecodedInstruction]) -> Vec<u8> {
-    let mut predecoded_bytes = Vec::with_capacity(predecoded_insn.len()  * 8);
-    for pinsn in predecoded_insn.iter() {
-        predecoded_bytes.push(pinsn.kind as u8);
-        predecoded_bytes.push(pinsn.rd);
-        predecoded_bytes.push(pinsn.rs1);
-        predecoded_bytes.push(pinsn.rs2);
-        predecoded_bytes.extend_from_slice(&pinsn.imm.to_le_bytes());
-    }
-    predecoded_bytes
-}
-
