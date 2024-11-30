@@ -9,5 +9,6 @@ pub enum RubicVError {
     IllegalMemoryAccess,
     WriteToReadOnlyMemory,
     Breakpoint, // :P
+    ELFDecodeError,
     SystemCall(u32)
 }

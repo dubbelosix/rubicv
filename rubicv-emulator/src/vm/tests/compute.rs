@@ -19,11 +19,22 @@ fn setup_compute_vm<'a>(pre_decoded_program: &'a PredecodedProgram, registers: &
 
     let mut vm = VM::<EnforceZero>::new(
         memory.memory_slab.as_mut() as *mut [u8],
+        pre_decoded_program.entrypoint,
         &pre_decoded_program.instructions
     );
     vm.registers.copy_from_slice(registers);
     vm
 
+}
+
+fn setup_elf_bytes(code_bytes: &[u8]) -> Vec<u8> {
+    let entry_point = [0u8;4];
+    let code_len = (code_bytes.len() as u32).to_le_bytes();
+    let mut elf_bytes = vec![];
+    elf_bytes.extend_from_slice(&code_len);
+    elf_bytes.extend_from_slice(&entry_point);
+    elf_bytes.extend_from_slice(&code_bytes);
+    elf_bytes
 }
 
 #[test]
@@ -33,9 +44,9 @@ fn test_add() {
     let mut registers = [0u32; 32];
     registers[1] = 5;
     registers[2] = 7;
-
-    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
-    let mut vm = setup_compute_vm(&pinsn, &registers);
+    let elf_bytes =  setup_elf_bytes(&instruction.to_le_bytes());
+    let predecoded_program = PredecodedProgram::new(&elf_bytes).unwrap();
+    let mut vm = setup_compute_vm(&predecoded_program, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 12);  // 5 + 7 = 12
@@ -50,8 +61,9 @@ fn test_sub() {
     registers[1] = 10;
     registers[2] = 3;
 
-    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
-    let mut vm = setup_compute_vm(&pinsn, &registers);
+    let elf_bytes =  setup_elf_bytes(&instruction.to_le_bytes());
+    let predecoded_program = PredecodedProgram::new(&elf_bytes).unwrap();
+    let mut vm = setup_compute_vm(&predecoded_program, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 7);  // 10 - 3 = 7
@@ -65,8 +77,9 @@ fn test_addi() {
     let mut registers = [0u32; 32];
     registers[1] = 10;
 
-    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
-    let mut vm = setup_compute_vm(&pinsn, &registers);
+    let elf_bytes =  setup_elf_bytes(&instruction.to_le_bytes());
+    let predecoded_program = PredecodedProgram::new(&elf_bytes).unwrap();
+    let mut vm = setup_compute_vm(&predecoded_program, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[2], 52);  // 10 + 42 = 52
@@ -81,8 +94,9 @@ fn test_signed_operations() {
     registers[1] = 0xFFFFFFFF;  // -1 in two's complement
     registers[2] = 0;
 
-    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
-    let mut vm = setup_compute_vm(&pinsn, &registers);
+    let elf_bytes =  setup_elf_bytes(&instruction.to_le_bytes());
+    let predecoded_program = PredecodedProgram::new(&elf_bytes).unwrap();
+    let mut vm = setup_compute_vm(&predecoded_program, &registers);
     vm.step().unwrap();
 
     assert_eq!(vm.registers[3], 1);  // -1 < 0, so result is 1

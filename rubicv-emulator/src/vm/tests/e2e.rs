@@ -3,8 +3,8 @@ use super::*;
 
 #[test]
 fn test_sum_program() {
-    let code = include_bytes!("test_data/output.bin");
-    let predecoded_program = PredecodedProgram::new(code,0);
+    let elf_bytes = include_bytes!("test_data/output.bin");
+    let predecoded_program = PredecodedProgram::new(elf_bytes).unwrap();
 
     let mut memory = setup_memory();
 
@@ -19,6 +19,7 @@ fn test_sum_program() {
     let mut vm = VMType::new(
         predecoded_program.writes_to_x0,
         memory.memory_slab.as_mut() as *mut [u8],
+        predecoded_program.entrypoint,
         &predecoded_program.instructions
     );
 

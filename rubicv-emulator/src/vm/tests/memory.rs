@@ -3,6 +3,7 @@ use super::*;
 fn setup_vm(memory: &mut TestMemory) -> VM<EnforceZero> {
     VM::<EnforceZero>::new(
         memory.memory_slab.as_mut() as *mut [u8],
+        0,
         &[]
     )
 }

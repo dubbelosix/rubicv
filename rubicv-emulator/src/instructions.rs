@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use crate::errors::RubicVError;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
@@ -294,15 +295,38 @@ pub struct PreDecodedInstruction {
     pub rs2: u8,
     pub imm: i32,
 }
-
+#[derive(Clone, Debug)]
 pub struct PredecodedProgram {
     pub instructions: Vec<PreDecodedInstruction>,
-    pub entry_address: u32,
+    pub entrypoint: usize,
     pub writes_to_x0: bool,
+    pub data_section: Vec<u8>
 }
 
 impl PredecodedProgram {
-    pub fn new(code: &[u8], entry_address: u32) -> Self {
+    pub fn new(elf_bytes: &[u8]) -> Result<Self, RubicVError> {
+        // Ensure the header is at least 8 bytes
+        if elf_bytes.len() < 8 {
+            return Err(RubicVError::ELFDecodeError)
+        }
+
+        let code_len = u32::from_le_bytes(elf_bytes.get(0..4).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?);
+        let entrypoint = (u32::from_le_bytes(elf_bytes.get(4..8).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?) / 4) as usize;
+
+        // Ensure there's enough data for the code section
+        let code_start = 8;
+        let code_end = code_start + code_len as usize;
+        if elf_bytes.len() < code_end {
+            return Err(RubicVError::ELFDecodeError)
+        }
+
+        // Extract the code section
+        let code = &elf_bytes[code_start..code_end];
+
+        // Extract the data section (everything after the code section)
+        let data_section = elf_bytes[code_end..].to_vec();
+
+        // Pre-decode the instructions
         let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
         let decoder = FastDecodeTable::new();
         let mut writes_to_x0 = false;
@@ -315,7 +339,7 @@ impl PredecodedProgram {
             // Code address is 0
             let predecoded_offset = i as i32;
 
-            let insn_word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            let insn_word = u32::from_le_bytes(chunk.try_into().expect("Incorrect chunk length"));
 
             let decoded = DecodedInstruction::new(insn_word);
             let insn = decoder.lookup(&decoded);
@@ -397,13 +421,14 @@ impl PredecodedProgram {
                 imm,
             };
             predecoded_instructions.push(pre_decoded_insn);
-
         }
 
-        PredecodedProgram {
+        Ok(PredecodedProgram {
             instructions: predecoded_instructions,
-            entry_address,
+            entrypoint,
             writes_to_x0,
-        }
+            data_section,
+        })
     }
+
 }

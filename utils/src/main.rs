@@ -5,8 +5,8 @@ use rubicv_emulator::instructions::PredecodedProgram;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        eprintln!("Usage: {} <elf-file>", args[0]);
+    if args.len() != 3 {
+        eprintln!("Usage: {} <elf-file> <output-file>", args[0]);
         std::process::exit(1);
     }
 
@@ -33,11 +33,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let text_vec = text_data.to_vec();
         let data_vec = data_section.to_vec();
-
-        println!("Entry: {:#x}", entry);
-        println!("Text size: {} bytes", text_vec.len());
-        println!("Data size: {} bytes", data_vec.len());
-
+        let mut rubicv_elf_bytes = vec![];
+        rubicv_elf_bytes.extend_from_slice((text_vec.len() as u32).to_le_bytes().as_ref());
+        rubicv_elf_bytes.extend_from_slice(entry.to_le_bytes().as_ref());
+        rubicv_elf_bytes.extend_from_slice(&text_vec);
+        rubicv_elf_bytes.extend_from_slice(&data_vec);
+        let _predecoded_program = PredecodedProgram::new(&rubicv_elf_bytes).unwrap();
+        fs::write(&args[2], &rubicv_elf_bytes)?;
+        println!("{:?}", rubicv_elf_bytes);
+        println!("Raw bytes saved to {}", args[2]);
     }
 
     Ok(())

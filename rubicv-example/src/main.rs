@@ -15,4 +15,3 @@ fn start(args: &[u32], _readonly: &[u32], scratch: &mut [u32]) {
 }
 
 entrypoint!(start);
-

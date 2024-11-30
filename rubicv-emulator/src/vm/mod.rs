@@ -82,12 +82,13 @@ impl<'a> VMType<'a> {
 
 impl<'a> VMType<'a> {
     pub fn new(writes_to_x0: bool,
-           memory_slab: *mut [u8],
-           instructions: &'a [PreDecodedInstruction]) -> Self {
+               memory_slab: *mut [u8],
+               entry_point: usize,
+               instructions: &'a [PreDecodedInstruction]) -> Self {
         if writes_to_x0 {
-            Self::Enforced(VM::<EnforceZero>::new(memory_slab, instructions))
+            Self::Enforced(VM::<EnforceZero>::new(memory_slab, entry_point,instructions))
         } else {
-            Self::NotEnforced(VM::<NoEnforceZero>::new(memory_slab, instructions))
+            Self::NotEnforced(VM::<NoEnforceZero>::new(memory_slab, entry_point, instructions))
         }
     }
 }
@@ -106,13 +107,14 @@ pub struct VM<'a, T: ZeroEnforcement> {
 
 impl<'a, T: ZeroEnforcement> VM<'a, T> {
     pub fn new(memory_slab: *mut [u8],
+               entry_point: usize,
                pre_decoded_instructions: &[PreDecodedInstruction],
     ) -> VM<T> {
             VM::<T> {
                 registers: [0; 32],
                 cycle_count: 0,
                 memory_slab,
-                ppc: 0,
+                ppc: entry_point,
                 pre_decoded_instructions,
                 _phantom: PhantomData,
             }
