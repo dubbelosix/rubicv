@@ -1,4 +1,4 @@
-use crate::instructions::{predecode, PredecodedProgram};
+use crate::instructions::{PredecodedProgram};
 use super::*;
 
 // R-type helper
@@ -34,7 +34,7 @@ fn test_add() {
     registers[1] = 5;
     registers[2] = 7;
 
-    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
     let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
@@ -50,7 +50,7 @@ fn test_sub() {
     registers[1] = 10;
     registers[2] = 3;
 
-    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
     let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
@@ -65,7 +65,7 @@ fn test_addi() {
     let mut registers = [0u32; 32];
     registers[1] = 10;
 
-    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
     let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 
@@ -81,7 +81,7 @@ fn test_signed_operations() {
     registers[1] = 0xFFFFFFFF;  // -1 in two's complement
     registers[2] = 0;
 
-    let pinsn = predecode(&instruction.to_le_bytes(), CODE_START);
+    let pinsn = PredecodedProgram::new(&instruction.to_le_bytes(),0);
     let mut vm = setup_compute_vm(&pinsn, &registers);
     vm.step().unwrap();
 

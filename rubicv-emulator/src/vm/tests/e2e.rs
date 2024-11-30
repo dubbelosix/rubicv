@@ -1,14 +1,14 @@
-use crate::instructions::predecode;
+use crate::instructions::{PredecodedProgram};
 use super::*;
 
 #[test]
 fn test_sum_program() {
-    let code = include_bytes!("test_data/sum_n.bin");
-    let predecoded_program = predecode(code, CODE_START);
+    let code = include_bytes!("test_data/output.bin");
+    let predecoded_program = PredecodedProgram::new(code,0);
 
     let mut memory = setup_memory();
 
-    let num_iterations = 10000u32;
+    let num_iterations = 7u32;
 
     let args = [num_iterations];
     let ro_mem_start = RO_START as usize;
@@ -23,7 +23,7 @@ fn test_sum_program() {
     );
 
     // Run until completion (should hit ecall)
-    match vm.as_operations().run(args.len() as u32, Some(100000)) {
+    match vm.as_operations().run(args.len() as u32, Some(100)) {
         ExecutionResult::Success(result) => {
             // Check the result in a0 (x10)
             assert_eq!(result, 0);

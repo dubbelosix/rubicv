@@ -277,6 +277,7 @@ impl FastDecodeTable {
         }
     }
 
+
     #[inline(always)]
     pub fn lookup(&self, decoded: &DecodedInstruction) -> Instruction {
         // Direct table lookup, no second array access needed
@@ -296,106 +297,113 @@ pub struct PreDecodedInstruction {
 
 pub struct PredecodedProgram {
     pub instructions: Vec<PreDecodedInstruction>,
+    pub entry_address: u32,
     pub writes_to_x0: bool,
 }
-pub fn predecode(code: &[u8], _code_start: u32) -> PredecodedProgram {
-    let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
-    let decoder = FastDecodeTable::new();
-    let mut writes_to_x0 = false;
 
-    for (i, chunk) in code.chunks(4).enumerate() {
-        if chunk.len() < 4 {
-            break;
-        }
+impl PredecodedProgram {
+    pub fn new(code: &[u8], entry_address: u32) -> Self {
+        let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
+        let decoder = FastDecodeTable::new();
+        let mut writes_to_x0 = false;
 
-        // Code address is 0
-        let predecoded_offset = i as i32;
+        for (i, chunk) in code.chunks(4).enumerate() {
+            if chunk.len() < 4 {
+                break;
+            }
 
-        let insn_word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        let decoded = DecodedInstruction::new(insn_word);
-        let insn = decoder.lookup(&decoded);
+            // Code address is 0
+            let predecoded_offset = i as i32;
 
-        let rd = decoded.rd as u8;
-        let rs1 = decoded.rs1 as u8;
-        let rs2 = decoded.rs2 as u8;
-        let mut imm = 0i32;
+            let insn_word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
 
-        // Check for writes to x0
-        match insn.kind {
-            InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI |
-            InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI |
-            InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW |
-            InsnKind::LBU | InsnKind::LHU | InsnKind::JALR |  // removed JAL
-            InsnKind::LUI | InsnKind::AUIPC | InsnKind::ADD | InsnKind::SUB |
-            InsnKind::SLL | InsnKind::SLT | InsnKind::SLTU | InsnKind::XOR |
-            InsnKind::SRL | InsnKind::SRA | InsnKind::OR | InsnKind::AND => {
-                if rd == 0 {
-                    if !(insn.kind == InsnKind::ADDI && rs1 == 0 && imm == 0) {
-                        if insn_word != 0 {
-                            writes_to_x0 = true;
+            let decoded = DecodedInstruction::new(insn_word);
+            let insn = decoder.lookup(&decoded);
+
+            let rd = decoded.rd as u8;
+            let rs1 = decoded.rs1 as u8;
+            let rs2 = decoded.rs2 as u8;
+            let mut imm = 0i32;
+
+            // Check for writes to x0
+            match insn.kind {
+                InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI |
+                InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI |
+                InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW |
+                InsnKind::LBU | InsnKind::LHU | InsnKind::JALR |  // removed JAL
+                InsnKind::LUI | InsnKind::AUIPC | InsnKind::ADD | InsnKind::SUB |
+                InsnKind::SLL | InsnKind::SLT | InsnKind::SLTU | InsnKind::XOR |
+                InsnKind::SRL | InsnKind::SRA | InsnKind::OR | InsnKind::AND => {
+                    if rd == 0 {
+                        if !(insn.kind == InsnKind::ADDI && rs1 == 0 && imm == 0) {
+                            if insn_word != 0 {
+                                writes_to_x0 = true;
+                            }
                         }
                     }
                 }
+                _ => {}
             }
-            _ => {}
+
+            match insn.kind {
+                // Immediate instructions
+                InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI
+                | InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI
+                | InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW
+                | InsnKind::LBU | InsnKind::LHU | InsnKind::JALR => {
+                    imm = decoded.imm_i();
+                }
+                // Store instructions
+                InsnKind::SB | InsnKind::SH | InsnKind::SW => {
+                    imm = decoded.imm_s();
+                }
+                // Branch instructions
+                InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT | InsnKind::BGE
+                | InsnKind::BLTU | InsnKind::BGEU => {
+                    let imm_b = decoded.imm_b();
+                    let target_index = predecoded_offset + (imm_b / 4);
+                    imm = target_index;
+                }
+                // JAL instruction
+                InsnKind::JAL => {
+                    let imm_j = decoded.imm_j();
+                    let target_index = predecoded_offset + (imm_j / 4);
+                    imm = target_index;
+                }
+                // LUI and AUIPC instructions
+                InsnKind::LUI => {
+                    imm = decoded.imm_u() as i32;
+                }
+                InsnKind::AUIPC => {
+                    imm = decoded.imm_u() as i32;
+                }
+                // Other instructions (compute, system, etc.)
+                InsnKind::ADD | InsnKind::SUB | InsnKind::XOR | InsnKind::OR | InsnKind::AND
+                | InsnKind::SLL | InsnKind::SRL | InsnKind::SRA | InsnKind::SLT
+                | InsnKind::SLTU | InsnKind::MUL | InsnKind::MULH | InsnKind::MULHSU
+                | InsnKind::MULHU | InsnKind::DIV | InsnKind::DIVU | InsnKind::REM
+                | InsnKind::REMU => {
+                    // No immediate needed; set imm to 0
+                    imm = 0;
+                }
+                _ => {}
+            }
+
+            let pre_decoded_insn = PreDecodedInstruction {
+                kind: insn.kind,
+                rd,
+                rs1,
+                rs2,
+                imm,
+            };
+            predecoded_instructions.push(pre_decoded_insn);
+
         }
 
-        match insn.kind {
-            // Immediate instructions
-            InsnKind::ADDI | InsnKind::XORI | InsnKind::ORI | InsnKind::ANDI
-            | InsnKind::SLTI | InsnKind::SLTIU | InsnKind::SLLI | InsnKind::SRLI
-            | InsnKind::SRAI | InsnKind::LB | InsnKind::LH | InsnKind::LW
-            | InsnKind::LBU | InsnKind::LHU | InsnKind::JALR => {
-                imm = decoded.imm_i();
-            }
-            // Store instructions
-            InsnKind::SB | InsnKind::SH | InsnKind::SW => {
-                imm = decoded.imm_s();
-            }
-            // Branch instructions
-            InsnKind::BEQ | InsnKind::BNE | InsnKind::BLT | InsnKind::BGE
-            | InsnKind::BLTU | InsnKind::BGEU => {
-                let imm_b = decoded.imm_b();
-                let target_index = predecoded_offset + (imm_b / 4);
-                imm = target_index;
-            }
-            // JAL instruction
-            InsnKind::JAL => {
-                let imm_j = decoded.imm_j();
-                let target_index = predecoded_offset + (imm_j / 4);
-                imm = target_index;
-            }
-            // LUI and AUIPC instructions
-            InsnKind::LUI => {
-                imm = decoded.imm_u() as i32;
-            }
-            InsnKind::AUIPC => {
-                imm = decoded.imm_u() as i32;
-            }
-            // Other instructions (compute, system, etc.)
-            InsnKind::ADD | InsnKind::SUB | InsnKind::XOR | InsnKind::OR | InsnKind::AND
-            | InsnKind::SLL | InsnKind::SRL | InsnKind::SRA | InsnKind::SLT
-            | InsnKind::SLTU | InsnKind::MUL | InsnKind::MULH | InsnKind::MULHSU
-            | InsnKind::MULHU | InsnKind::DIV | InsnKind::DIVU | InsnKind::REM
-            | InsnKind::REMU => {
-                // No immediate needed; set imm to 0
-                imm = 0;
-            }
-            _ => {}
+        PredecodedProgram {
+            instructions: predecoded_instructions,
+            entry_address,
+            writes_to_x0,
         }
-
-        let pre_decoded_insn = PreDecodedInstruction {
-            kind: insn.kind,
-            rd,
-            rs1,
-            rs2,
-            imm,
-        };
-        predecoded_instructions.push(pre_decoded_insn);
-    }
-
-    PredecodedProgram {
-        instructions: predecoded_instructions,
-        writes_to_x0,
     }
 }

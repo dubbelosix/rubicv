@@ -99,7 +99,6 @@ pub struct VM<'a, T: ZeroEnforcement> {
     // writes are prevented w/ wraparound
     pub memory_slab: *mut [u8],
 
-
     ppc: usize, // pre-decoded program counter
     pre_decoded_instructions: &'a [PreDecodedInstruction], // pre-decoded store
     _phantom: PhantomData<T>,
@@ -191,7 +190,6 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
         let rs2 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs2 as usize) };
         let rd = pre_decoded_insn.rd;
         let imm = pre_decoded_insn.imm;
-
         let mut next_ppc = self.ppc + 1;
 
         match pre_decoded_insn.kind {
@@ -236,6 +234,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             InsnKind::JALR => {
                 unsafe { *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc + 1) * 4) as u32 };
                 let target_addr = rs1.wrapping_add(imm as u32) & !1;
+                // println!("ppc:{:?} rd: {:?} rs1:{:?} imm:{:?} target_addr:{:?}",self.ppc,rd, rs1,imm,target_addr);
                 next_ppc = (target_addr / 4) as usize;
             },
 
@@ -278,7 +277,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             // AUIPC instruction
             InsnKind::AUIPC => {
                 unsafe {
-                    *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc as u32) * 4).wrapping_add(imm as u32);
+                    *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc as u32) * 4).wrapping_add((imm << 12) as u32);
                 };
             },
 
@@ -325,7 +324,6 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             _ => return Err(RubicVError::IllegalInstruction),
         }
 
-        // Update the program counter
         self.ppc = next_ppc;
 
         Ok(())
