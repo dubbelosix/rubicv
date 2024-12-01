@@ -55,6 +55,8 @@ macro_rules! entrypoint {
                     options(noreturn)
                 );
             }
+            // prevent editor from complaining about ! return type
+            core::hint::unreachable_unchecked()
         }
 
         #[panic_handler]
@@ -67,6 +69,8 @@ macro_rules! entrypoint {
                     options(noreturn)
                 );
             }
+            // prevent editor from complaining about ! return type
+            core::hint::unreachable_unchecked()
         }
     };
 }
