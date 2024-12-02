@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use crate::errors::RubicVError;
+use crate::memory::CODE_SIZE;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
@@ -300,31 +301,18 @@ pub struct PredecodedProgram {
     pub instructions: Vec<PreDecodedInstruction>,
     pub entrypoint: usize,
     pub writes_to_x0: bool,
-    pub data_section: Vec<u8>
 }
 
 impl PredecodedProgram {
     pub fn new(elf_bytes: &[u8]) -> Result<Self, RubicVError> {
         // Ensure the header is at least 8 bytes
-        if elf_bytes.len() < 8 {
+        if elf_bytes.len() < 4 || elf_bytes.len() > CODE_SIZE as usize + 4  {
             return Err(RubicVError::ELFDecodeError)
         }
 
-        let code_len = u32::from_le_bytes(elf_bytes.get(0..4).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?);
-        let entrypoint = (u32::from_le_bytes(elf_bytes.get(4..8).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?) / 4) as usize;
+        let code = &elf_bytes[4..];
+        let entrypoint = (u32::from_le_bytes(elf_bytes.get(0..4).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?) / 4) as usize;
 
-        // Ensure there's enough data for the code section
-        let code_start = 8;
-        let code_end = code_start + code_len as usize;
-        if elf_bytes.len() < code_end {
-            return Err(RubicVError::ELFDecodeError)
-        }
-
-        // Extract the code section
-        let code = &elf_bytes[code_start..code_end];
-
-        // Extract the data section (everything after the code section)
-        let data_section = elf_bytes[code_end..].to_vec();
 
         // Pre-decode the instructions
         let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
@@ -427,7 +415,6 @@ impl PredecodedProgram {
             instructions: predecoded_instructions,
             entrypoint,
             writes_to_x0,
-            data_section,
         })
     }
 

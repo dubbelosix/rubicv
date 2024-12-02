@@ -47,30 +47,30 @@ macro_rules! entrypoint {
             $func(args, readonly, scratch);
 
             // Return after function completes
-            unsafe {
-                core::arch::asm!(
-                    "mv a1, {0}",
-                    "ecall",
-                    in(reg) 0,
-                    options(noreturn)
-                );
+            loop {
+                unsafe {
+                    core::arch::asm!(
+                        "mv a1, {0}",
+                        "ecall",
+                        in(reg) 0,
+                        options(noreturn)
+                    );
+                }
             }
-            // prevent editor from complaining about ! return type
-            core::hint::unreachable_unchecked()
         }
 
         #[panic_handler]
         fn panic(_info: &core::panic::PanicInfo) -> ! {
-            unsafe {
-                core::arch::asm!(
-                    "mv a1, {0}",
-                    "ecall",
-                    in(reg) 1,
-                    options(noreturn)
-                );
+            loop {
+                unsafe {
+                    core::arch::asm!(
+                        "mv a1, {0}",
+                        "ecall",
+                        in(reg) 1,
+                        options(noreturn)
+                    );
+                }
             }
-            // prevent editor from complaining about ! return type
-            core::hint::unreachable_unchecked()
         }
     };
 }

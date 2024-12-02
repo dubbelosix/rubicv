@@ -29,9 +29,7 @@ fn setup_compute_vm<'a>(pre_decoded_program: &'a PredecodedProgram, registers: &
 
 fn setup_elf_bytes(code_bytes: &[u8]) -> Vec<u8> {
     let entry_point = [0u8;4];
-    let code_len = (code_bytes.len() as u32).to_le_bytes();
     let mut elf_bytes = vec![];
-    elf_bytes.extend_from_slice(&code_len);
     elf_bytes.extend_from_slice(&entry_point);
     elf_bytes.extend_from_slice(&code_bytes);
     elf_bytes
