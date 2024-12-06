@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let buffer = fs::read(&args[1])?;
 
     if let Object::Elf(elf) = Object::parse(&buffer)? {
-        let entry = elf.entry;
+        let entry = elf.entry as u32;
 
         // Extract .text section
         let text_data = if let Some(text) = elf.section_headers.iter()

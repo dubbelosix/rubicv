@@ -189,7 +189,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn step(&mut self) -> Result<(), RubicVError> {
         let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
-        // println!("{:?}",pre_decoded_insn);
+        // println!("{:?}", pre_decoded_insn);
         T::enforce_zero(&mut self.registers);
 
         let rs1 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs1 as usize) };
@@ -197,7 +197,10 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
         let rd = pre_decoded_insn.rd;
         let imm = pre_decoded_insn.imm;
         let mut next_ppc = self.ppc + 1;
-
+        // println!(
+        //     "Executing {:?} at ppc={}: rd={}, rs1={}, rs2={}, imm={}",
+        //     pre_decoded_insn.kind, self.ppc, rd, pre_decoded_insn.rs1, pre_decoded_insn.rs2, imm
+        // );
         match pre_decoded_insn.kind {
             // Compute instructions
             InsnKind::ADD => unsafe { *self.registers.get_unchecked_mut(rd as usize) = rs1.wrapping_add(rs2) },
@@ -255,6 +258,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             },
             InsnKind::LW => {
                 let addr = rs1.wrapping_add(imm as u32);
+                // println!("LW from address: {:#x}, value: {:#x}", addr, self.read_u32(addr));
                 unsafe { *self.registers.get_unchecked_mut(rd as usize) = self.read_u32(addr) };
             },
             InsnKind::LBU => {
@@ -277,19 +281,23 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             },
             InsnKind::SW => {
                 let addr = rs1.wrapping_add(imm as u32);
+                // println!("Store to address: {:#x}, value: {:#x}", addr, rs2);
                 self.write_u32(addr, rs2);
             },
 
             // AUIPC instruction
             InsnKind::AUIPC => {
                 unsafe {
-                    *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc as u32) * 4).wrapping_add((imm << 12) as u32);
+                    // *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc as u32) * 4).wrapping_add((imm << 12) as u32);
+                    *self.registers.get_unchecked_mut(rd as usize) = ((self.ppc as u32) * 4).wrapping_add(imm as u32);
                 };
             },
 
             // LUI instruction
             InsnKind::LUI => unsafe {
+
                 *self.registers.get_unchecked_mut(rd as usize) = imm as u32;
+                // println!("LUI from imm: {:#x}, rd: {:#x}", imm, rd);
             },
 
             // System instructions
@@ -329,7 +337,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
             // Catch-all for unhandled instructions
             _ => return Err(RubicVError::IllegalInstruction),
         }
-
+        // println!("Next ppc set to {}", next_ppc);
         self.ppc = next_ppc;
 
         Ok(())

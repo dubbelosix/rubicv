@@ -313,7 +313,6 @@ impl PredecodedProgram {
         let code = &elf_bytes[4..];
         let entrypoint = (u32::from_le_bytes(elf_bytes.get(0..4).ok_or(RubicVError::ELFDecodeError)?.try_into().map_err(|_| RubicVError::ELFDecodeError)?) / 4) as usize;
 
-
         // Pre-decode the instructions
         let mut predecoded_instructions = Vec::with_capacity(code.len() / 4);
         let decoder = FastDecodeTable::new();
@@ -408,6 +407,7 @@ impl PredecodedProgram {
                 rs2,
                 imm,
             };
+            // println!("{:?} : {:?} | {:?}",insn_word, insn,pre_decoded_insn);
             predecoded_instructions.push(pre_decoded_insn);
         }
 
