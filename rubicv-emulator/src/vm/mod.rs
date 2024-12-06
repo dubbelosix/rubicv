@@ -42,9 +42,10 @@ pub trait VMOperations {
     fn step(&mut self) -> Result<(), RubicVError>;
     fn set_registers(&mut self, registers: &[u32]);
     fn read_u32(&self, addr: u32) -> u32;
-    fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult;
+    fn run(&mut self, max_cycles: Option<u32>) -> ExecutionResult;
     fn get_register(&self, r: u8) -> u32;
     fn get_ppc(&self) -> usize;
+    fn get_cycle_count(&self) -> usize;
 }
 
 impl<'a, T: ZeroEnforcement> VMOperations for VM<'a, T> {
@@ -60,14 +61,17 @@ impl<'a, T: ZeroEnforcement> VMOperations for VM<'a, T> {
         self.read_u32(addr)
     }
 
-    fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
-        self.run(arg_count, max_cycles)
+    fn run(&mut self, max_cycles: Option<u32>) -> ExecutionResult {
+        self.run(max_cycles)
     }
     fn get_register(&self, r: u8) -> u32 {
         self.registers[r as usize]
     }
     fn get_ppc(&self) -> usize {
         self.ppc
+    }
+    fn get_cycle_count(&self) -> usize {
+        self.cycle_count
     }
 }
 
@@ -185,7 +189,7 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     #[inline(always)]
     pub fn step(&mut self) -> Result<(), RubicVError> {
         let pre_decoded_insn = unsafe { self.pre_decoded_instructions.get_unchecked(self.ppc) };
-
+        // println!("{:?}",pre_decoded_insn);
         T::enforce_zero(&mut self.registers);
 
         let rs1 = unsafe { *self.registers.get_unchecked(pre_decoded_insn.rs1 as usize) };
@@ -332,9 +336,8 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
     }
 
     #[cfg(target_os = "zkvm")]
-    pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
+    pub fn run(&mut self, max_cycles: Option<u32>) -> ExecutionResult {
         unsafe {
-            *self.registers.get_unchecked_mut(10) = arg_count;
             *self.registers.get_unchecked_mut(2) = STACK_START;
 
             let max = max_cycles.unwrap_or(u32::MAX);
@@ -370,9 +373,8 @@ impl<'a, T: ZeroEnforcement> VM<'a, T> {
         }
     }
     #[cfg(not(target_os = "zkvm"))]
-    pub fn run(&mut self, arg_count: u32, max_cycles: Option<u32>) -> ExecutionResult {
+    pub fn run(&mut self, max_cycles: Option<u32>) -> ExecutionResult {
         unsafe {
-            *self.registers.get_unchecked_mut(10) = arg_count;
             *self.registers.get_unchecked_mut(2) = STACK_START;
         }
         let max = max_cycles.unwrap_or(u32::MAX);

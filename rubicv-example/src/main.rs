@@ -3,7 +3,7 @@
 
 use rubicv_sdk::*;
 
-fn start(args: &[u32], _readonly: &[u32], scratch: &mut [u32]) {
+fn start(args: &[u32], _memory_slab: &[u8], scratch: &mut [u32]) {
     let n = args[0];
     let mut sum = 0;
 
