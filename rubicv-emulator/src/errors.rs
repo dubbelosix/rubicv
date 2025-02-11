@@ -1,5 +1,6 @@
 #[derive(Debug, PartialEq)]
 pub enum RubicVError {
+    GeneralVMError,
     IllegalInstruction,
     InvalidInstruction,
     MemoryReadOutOfBounds,

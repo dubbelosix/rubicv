@@ -90,7 +90,7 @@ impl<'a> VMType<'a> {
                entry_point: usize,
                instructions: &'a [PreDecodedInstruction]) -> Self {
         if writes_to_x0 {
-            Self::Enforced(VM::<EnforceZero>::new(memory_slab, entry_point,instructions))
+            Self::Enforced(VM::<EnforceZero>::new(memory_slab, entry_point, instructions))
         } else {
             Self::NotEnforced(VM::<NoEnforceZero>::new(memory_slab, entry_point, instructions))
         }
